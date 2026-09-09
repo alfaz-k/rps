@@ -95,7 +95,7 @@
             <span class="target-num" id="targetScoreDisplay">--</span>
           </div>
         </div>
-        <div class="cricket-meta" id="cricketMetaMessage">1st Innings: Set the target!</div>
+        <div class="cricket-meta" id="cricketMetaMessage">Toss pending...</div>
       </div>
     </section>
 
@@ -156,6 +156,51 @@
     <footer class="app-credit">
       &copy; <span id="yearEl"></span> <strong>Alfaz Kaladagi</strong>. All Rights Reserved.
     </footer>
+  </div>
+
+  <!-- TOSS SETUP MODAL (HOST SELECTS TYPE & CALL) -->
+  <div class="modal-backdrop" id="tossSetupModal">
+    <div class="modal-card">
+      <div class="modal-icon-badge"><i class="fas fa-coins"></i></div>
+      <h2>CRICKET TOSS</h2>
+      <p id="tossSetupDesc">Configure the toss round:</p>
+
+      <div class="toss-config-section" id="hostTossControls">
+        <label class="config-label">TOSS FORMAT</label>
+        <div class="mode-toggles toss-mode-toggles">
+          <button type="button" class="mode-btn active" id="tossTypeDefaultBtn" data-tosstype="single">Default (1 Round)</button>
+          <button type="button" class="mode-btn" id="tossTypeBo3Btn" data-tosstype="bo3">Best of 3</button>
+        </div>
+
+        <label class="config-label" style="margin-top: 10px;">YOUR CALL</label>
+        <div class="mode-toggles toss-call-toggles">
+          <button type="button" class="mode-btn active" id="callOddBtn" data-call="odd">ODD</button>
+          <button type="button" class="mode-btn" id="callEvenBtn" data-call="even">EVEN</button>
+        </div>
+
+        <button class="action-btn primary full-btn" id="startTossBtn" style="margin-top: 14px;">Start Toss</button>
+      </div>
+
+      <div id="joinerTossWait" style="display: none;">
+        <p class="waiting-text">Host is setting up toss format and call...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOSS DECISION MODAL (WINNER SELECTS BAT OR BOWL) -->
+  <div class="modal-backdrop" id="tossDecisionModal">
+    <div class="modal-card">
+      <div class="modal-icon-badge"><i class="fas fa-trophy"></i></div>
+      <h2 id="tossWinnerHeading">TOSS WON!</h2>
+      <p id="tossWinnerDesc">Choose your role:</p>
+      <div class="btn-cluster" id="tossDecisionBtns">
+        <button class="action-btn primary" id="chooseBatBtn">Bat First</button>
+        <button class="action-btn secondary" id="chooseBowlBtn">Bowl First</button>
+      </div>
+      <div id="tossDecisionWait" style="display: none;">
+        <p class="waiting-text">Toss winner is picking Bat or Bowl...</p>
+      </div>
+    </div>
   </div>
 
   <!-- PERSISTENT INNINGS BREAK / WICKET MODAL (Requires OK) -->
