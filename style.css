@@ -1,17 +1,19 @@
 :root {
-  --bg-deep: #070913;
-  --panel: rgba(18, 23, 42, 0.85);
-  --panel-border: rgba(255, 255, 255, 0.1);
+  --bg-deep: #050711;
+  --panel: rgba(15, 20, 38, 0.88);
+  --panel-border: rgba(0, 240, 255, 0.15);
   --accent-cyan: #00f0ff;
+  --accent-cyan-glow: rgba(0, 240, 255, 0.35);
   --accent-pink: #ff2a85;
   --accent-gold: #ffd60a;
+  --accent-gold-glow: rgba(255, 214, 10, 0.35);
   --accent-green: #05ffa1;
   --accent-red: #ff3366;
   --text-pure: #ffffff;
   --text-muted: #94a3b8;
   --font-title: 'Orbitron', monospace;
   --font-text: 'Outfit', sans-serif;
-  --radius-xl: 20px;
+  --radius-xl: 22px;
   --radius-md: 14px;
   --radius-sm: 10px;
   --trans: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
@@ -46,10 +48,10 @@ body {
 
 .ambient-glow {
   position: fixed;
-  width: 320px;
-  height: 320px;
+  width: 340px;
+  height: 340px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(0, 240, 255, 0.14) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(0, 240, 255, 0.16) 0%, transparent 70%);
   top: 10%;
   pointer-events: none;
   filter: blur(60px);
@@ -60,7 +62,7 @@ body {
    ========================================================= */
 .toast-container {
   position: fixed;
-  top: 18px;
+  top: 16px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 200;
@@ -73,14 +75,14 @@ body {
 }
 
 .toast-item {
-  background: rgba(16, 21, 41, 0.95);
+  background: rgba(13, 17, 34, 0.96);
   border: 1px solid var(--accent-cyan);
   border-radius: 30px;
   padding: 10px 18px;
   display: flex;
   align-items: center;
   gap: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 12px rgba(0, 240, 255, 0.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 12px var(--accent-cyan-glow);
   backdrop-filter: blur(12px);
   animation: toastIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
@@ -91,7 +93,7 @@ body {
 
 .toast-item.info { border-color: var(--accent-cyan); }
 .toast-item.success { border-color: var(--accent-green); }
-.toast-item.warning { border-color: var(--accent-gold); }
+.toast-item.warning { border-color: var(--accent-gold); box-shadow: 0 8px 24px rgba(0,0,0,0.6), 0 0 12px var(--accent-gold-glow); }
 .toast-item.danger { border-color: var(--accent-red); }
 
 .toast-icon { font-size: 0.95rem; }
@@ -101,7 +103,7 @@ body {
 .toast-item.danger .toast-icon { color: var(--accent-red); }
 
 .toast-msg {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: #fff;
   letter-spacing: 0.3px;
@@ -155,6 +157,7 @@ body {
 
 .room-indicator:hover {
   border-color: var(--accent-cyan);
+  box-shadow: 0 0 10px var(--accent-cyan-glow);
 }
 
 .pulse-dot {
@@ -190,6 +193,62 @@ body {
   color: var(--accent-cyan);
 }
 
+/* =========================================================
+   PERSISTENT TOSS CALL BADGES
+   ========================================================= */
+.toss-call-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(10, 14, 29, 0.85);
+  border: 1px solid rgba(255, 214, 10, 0.35);
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  margin-top: 4px;
+  box-shadow: 0 0 14px rgba(255, 214, 10, 0.15);
+}
+
+.call-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.call-user {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.call-val {
+  font-family: var(--font-title);
+  font-size: 0.8rem;
+  font-weight: 900;
+  padding: 2px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+
+.host-tag .call-val {
+  background: rgba(0, 240, 255, 0.18);
+  color: var(--accent-cyan);
+  border: 1px solid var(--accent-cyan);
+}
+
+.guest-tag .call-val {
+  background: rgba(255, 42, 133, 0.18);
+  color: var(--accent-pink);
+  border: 1px solid var(--accent-pink);
+}
+
+.call-vs {
+  font-family: var(--font-title);
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--accent-gold);
+}
+
 /* Stat Dashboard */
 .stat-dashboard {
   background: var(--panel);
@@ -216,7 +275,7 @@ body {
 .side-score.turn-active {
   background: rgba(0, 240, 255, 0.12);
   border-color: var(--accent-cyan);
-  box-shadow: 0 0 12px rgba(0, 240, 255, 0.25);
+  box-shadow: 0 0 12px var(--accent-cyan-glow);
 }
 
 .side-score .player-name {
@@ -430,8 +489,8 @@ body {
 }
 
 .choice-tile {
-  background: linear-gradient(180deg, rgba(30, 41, 69, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%);
-  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(180deg, rgba(25, 34, 60, 0.8) 0%, rgba(12, 17, 34, 0.95) 100%);
+  border: 1.5px solid rgba(0, 240, 255, 0.18);
   border-radius: var(--radius-md);
   color: var(--text-pure);
   display: flex;
@@ -441,7 +500,7 @@ body {
   cursor: pointer;
   outline: none;
   transition: var(--trans);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
   position: relative;
   overflow: hidden;
 }
@@ -484,7 +543,7 @@ body {
 .choice-tile:hover:not(:disabled) {
   border-color: var(--accent-cyan);
   transform: translateY(-3px);
-  box-shadow: 0 6px 16px rgba(0, 240, 255, 0.25);
+  box-shadow: 0 6px 18px var(--accent-cyan-glow);
 }
 
 .choice-tile:hover:not(:disabled) .tile-icon-wrap {
@@ -501,8 +560,8 @@ body {
 
 .choice-tile.active-pick {
   border-color: var(--accent-cyan);
-  background: linear-gradient(180deg, rgba(0, 240, 255, 0.25) 0%, rgba(15, 23, 42, 0.9) 100%);
-  box-shadow: 0 0 16px rgba(0, 240, 255, 0.4);
+  background: linear-gradient(180deg, rgba(0, 240, 255, 0.28) 0%, rgba(12, 17, 34, 0.95) 100%);
+  box-shadow: 0 0 16px var(--accent-cyan-glow);
 }
 
 .choice-tile:disabled {
@@ -533,7 +592,7 @@ body {
 .lobby-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(7, 9, 19, 0.96);
+  background: rgba(5, 7, 17, 0.96);
   backdrop-filter: blur(16px);
   z-index: 100;
   display: flex;
@@ -609,7 +668,7 @@ body {
   background: var(--accent-cyan);
   color: #000;
   border-color: var(--accent-cyan);
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+  box-shadow: 0 0 10px var(--accent-cyan-glow);
 }
 
 .field-group {
@@ -694,8 +753,8 @@ body {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(5, 7, 18, 0.92);
-  backdrop-filter: blur(12px);
+  background: rgba(4, 6, 15, 0.94);
+  backdrop-filter: blur(14px);
   z-index: 120;
   display: flex;
   align-items: center;
@@ -714,12 +773,12 @@ body {
 .modal-card {
   width: 100%;
   max-width: 340px;
-  background: #101529;
+  background: #0d1224;
   border: 1.5px solid var(--panel-border);
   border-radius: var(--radius-xl);
   padding: 1.8rem 1.4rem;
   text-align: center;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.75);
 }
 
 .modal-icon-badge {
