@@ -58,6 +58,12 @@ const p2NameLabel = document.getElementById('p2NameLabel');
 const p1Score = document.getElementById('p1Score');
 const p2Score = document.getElementById('p2Score');
 
+const tossCallStrip = document.getElementById('tossCallStrip');
+const tossHostUser = document.getElementById('tossHostUser');
+const tossHostVal = document.getElementById('tossHostVal');
+const tossGuestUser = document.getElementById('tossGuestUser');
+const tossGuestVal = document.getElementById('tossGuestVal');
+
 const rpsBoard = document.getElementById('rpsBoard');
 const cricketBoard = document.getElementById('cricketBoard');
 const rpsDeck = document.getElementById('rpsDeck');
@@ -270,6 +276,7 @@ function applyGameModeUI() {
     gameTypeBadge.textContent = 'RPS';
     myDisplay.innerHTML = `<i class="fas fa-hand-back-fist"></i>`;
     oppDisplay.innerHTML = `<i class="fas fa-hand-back-fist"></i>`;
+    tossCallStrip.style.display = 'none';
   }
 }
 
@@ -320,7 +327,7 @@ createBtn.addEventListener('click', () => {
     applyGameModeUI();
     highlightTurn();
     disableButtons(true);
-    showToast(`Room ${roomKey} created! Share code with friend.`, 'success');
+    showToast(`Room ${roomKey} created!`, 'success');
   });
 
   peer.on('connection', c => {
@@ -330,7 +337,7 @@ createBtn.addEventListener('click', () => {
 
   peer.on('error', () => {
     lobbyError.textContent = 'Room error. Tap create again.';
-    showToast('Room creation failed. Please try again.', 'danger');
+    showToast('Room creation failed.', 'danger');
   });
 });
 
@@ -365,11 +372,11 @@ joinBtn.addEventListener('click', () => {
       lobbyScreen.classList.add('hidden');
       setupConnEvents();
       conn.send({ type: 'handshake', name: myName });
-      showToast(`Connected to room ${rawCode}!`, 'success');
+      showToast(`Connected to room!`, 'success');
     });
     conn.on('error', () => {
       lobbyError.textContent = 'Room not found! Check code.';
-      showToast('Could not find room. Check code.', 'danger');
+      showToast('Could not find room.', 'danger');
     });
   });
 
@@ -398,7 +405,7 @@ function setupConnEvents() {
     if (data.type === 'handshake') {
       oppName = data.name || 'Opponent';
       p2NameLabel.textContent = oppName.toUpperCase();
-      showToast(`${oppName} joined the match!`, 'info');
+      showToast(`${oppName} joined!`, 'info');
     } else if (data.type === 'init_sync') {
       gameMode = data.mode;
       oppName = data.hostName || 'Host';
@@ -408,6 +415,13 @@ function setupConnEvents() {
         openTossSetupModal();
       }
       highlightTurn();
+    } else if (data.type === 'init_toss_cycle') {
+      resetMatchStates(false);
+      openTossSetupModal();
+    } else if (data.type === 'toss_call_update') {
+      tossState.hostCall = data.hostCall;
+      updateTossBadges();
+      showToast(`Host switched call to: ${data.hostCall.toUpperCase()} (You: ${data.hostCall === 'odd' ? 'EVEN' : 'ODD'})`, 'warning');
     } else if (data.type === 'toss_start') {
       tossState.active = true;
       tossState.format = data.format;
@@ -416,7 +430,8 @@ function setupConnEvents() {
       tossState.joinerWins = 0;
       tossState.round = 1;
       tossSetupModal.classList.remove('open');
-      showToast(`Toss started! Host called ${data.hostCall.toUpperCase()}`, 'warning');
+      updateTossBadges();
+      showToast(`Toss started! Host is ${data.hostCall.toUpperCase()} | You are ${data.hostCall === 'odd' ? 'EVEN' : 'ODD'}`, 'warning');
       promptTossMove();
     } else if (data.type === 'toss_decision_open') {
       handleTossDecisionOpen(data.winnerIsHost);
@@ -424,14 +439,16 @@ function setupConnEvents() {
       applyTossDecision(data.hostRole);
     } else if (data.type === 'locked') {
       oppActionState.textContent = 'Locked!';
-      showToast(`${oppName} locked their move!`, 'info');
     } else if (data.type === 'move') {
       oppCurrentChoice = data.choice;
       checkTurnCompletion();
     } else if (data.type === 'start_innings_2') {
       startSecondInnings();
     } else if (data.type === 'reset') {
-      resetMatchStates();
+      resetMatchStates(false);
+      if (gameMode === 'cricket') {
+        openTossSetupModal();
+      }
     }
   });
 
@@ -439,13 +456,28 @@ function setupConnEvents() {
     roundStatusText.textContent = 'Opponent left.';
     oppActionState.textContent = 'Disconnected';
     disableButtons(true);
-    showToast('Opponent disconnected from arena.', 'danger');
+    showToast('Opponent disconnected.', 'danger');
   });
 }
 
 /* =========================================================
-   TOSS SYSTEM (HAND CRICKET ODD/EVEN VIA 1-6)
+   TOSS SYSTEM & PERSISTENT BADGES
    ========================================================= */
+function updateTossBadges() {
+  if (gameMode !== 'cricket' || !tossState.active) {
+    tossCallStrip.style.display = 'none';
+    return;
+  }
+  tossCallStrip.style.display = 'flex';
+  const isOdd = tossState.hostCall === 'odd';
+
+  tossHostUser.textContent = isHost ? myName.toUpperCase() : oppName.toUpperCase();
+  tossHostVal.textContent = isOdd ? 'ODD' : 'EVEN';
+
+  tossGuestUser.textContent = isHost ? oppName.toUpperCase() : myName.toUpperCase();
+  tossGuestVal.textContent = isOdd ? 'EVEN' : 'ODD';
+}
+
 function openTossSetupModal() {
   tossSetupModal.classList.add('open');
   if (isHost) {
@@ -462,13 +494,11 @@ tossTypeDefaultBtn.addEventListener('click', () => {
   tossTypeDefaultBtn.classList.add('active');
   tossTypeBo3Btn.classList.remove('active');
   tossState.format = 'single';
-  showToast('Toss format: 1-Round Default', 'info');
 });
 tossTypeBo3Btn.addEventListener('click', () => {
   tossTypeBo3Btn.classList.add('active');
   tossTypeDefaultBtn.classList.remove('active');
   tossState.format = 'bo3';
-  showToast('Toss format: Best of 3', 'info');
 });
 
 // Call selection buttons
@@ -476,13 +506,13 @@ callOddBtn.addEventListener('click', () => {
   callOddBtn.classList.add('active');
   callEvenBtn.classList.remove('active');
   tossState.hostCall = 'odd';
-  showToast('Host call: ODD', 'info');
+  if (conn) conn.send({ type: 'toss_call_update', hostCall: 'odd' });
 });
 callEvenBtn.addEventListener('click', () => {
   callEvenBtn.classList.add('active');
   callOddBtn.classList.remove('active');
   tossState.hostCall = 'even';
-  showToast('Host call: EVEN', 'info');
+  if (conn) conn.send({ type: 'toss_call_update', hostCall: 'even' });
 });
 
 // Host triggers Toss Duel
@@ -499,7 +529,7 @@ startTossBtn.addEventListener('click', () => {
   });
 
   tossSetupModal.classList.remove('open');
-  showToast(`Toss live! Pick your hand number (1-6).`, 'warning');
+  updateTossBadges();
   promptTossMove();
 });
 
@@ -525,7 +555,6 @@ function evaluateTossDuel() {
   myDisplay.innerHTML = `<span style="font-family:var(--font-title);font-size:2rem;font-weight:900">${p1}</span>`;
   oppDisplay.innerHTML = `<span style="font-family:var(--font-title);font-size:2rem;font-weight:900">${p2}</span>`;
 
-  // Check winner of this toss round
   const hostWonThis = outcomeString === tossState.hostCall;
   if (hostWonThis) {
     tossState.hostWins++;
@@ -538,17 +567,14 @@ function evaluateTossDuel() {
   promptTitle.textContent = `SUM = ${sum} (${outcomeString.toUpperCase()})`;
   const roundWinnerName = hostWonThis ? (isHost ? 'You' : oppName) : (isHost ? oppName : 'You');
   promptSub.textContent = `${roundWinnerName} won this toss round!`;
-  showToast(`Toss sum is ${sum} (${outcomeString.toUpperCase()})!`, 'info');
 
   if (tossState.format === 'single') {
     concludeToss(hostWonThis);
   } else {
-    // Best of 3
     if (tossState.hostWins >= 2 || tossState.joinerWins >= 2) {
       concludeToss(tossState.hostWins >= 2);
     } else {
       tossState.round++;
-      showToast(`Next toss round loading...`, 'info');
       setTimeout(promptTossMove, 1800);
     }
   }
@@ -556,6 +582,7 @@ function evaluateTossDuel() {
 
 function concludeToss(winnerIsHost) {
   tossState.active = false;
+  tossCallStrip.style.display = 'none';
   setTimeout(() => {
     if (isHost) {
       conn.send({ type: 'toss_decision_open', winnerIsHost });
@@ -669,7 +696,6 @@ function evaluateRPS() {
     promptBar.className = 'prompt-bar';
     promptTitle.textContent = 'STANDOFF!';
     promptSub.textContent = 'Both chose identical hands.';
-    showToast('Standoff! Identical hands.', 'warning');
   } else if (beats[myCurrentChoice] === oppCurrentChoice) {
     rpsScoreMe++;
     promptBar.className = 'prompt-bar win';
@@ -677,13 +703,11 @@ function evaluateRPS() {
     promptSub.textContent = `${myCurrentChoice.toUpperCase()} beats ${oppCurrentChoice.toUpperCase()}`;
     AudioFX.win();
     blastConfetti();
-    showToast(`You won the round!`, 'success');
   } else {
     rpsScoreOpp++;
     promptBar.className = 'prompt-bar lose';
     promptTitle.textContent = 'ROUND LOST!';
     promptSub.textContent = `${oppCurrentChoice.toUpperCase()} counters ${myCurrentChoice.toUpperCase()}`;
-    showToast(`${oppName} won the round!`, 'danger');
   }
 
   p1Score.textContent = rpsScoreMe;
@@ -739,7 +763,6 @@ function evaluateCricket() {
     promptTitle.textContent = 'WICKET! OUT!';
     promptSub.textContent = `Both threw ${myPick}!`;
     cricketWickets.textContent = '/1';
-    showToast(`WICKET! Both threw ${myPick}!`, 'danger');
 
     if (cricketState.innings === 1) {
       const targetScore = cricketState.runs + 1;
@@ -757,6 +780,7 @@ function evaluateCricket() {
       }, 1000);
     }
   } else {
+    // Runs scored
     cricketState.runs += batsmansRun;
     cricketRuns.textContent = cricketState.runs;
     AudioFX.tap();
@@ -764,7 +788,6 @@ function evaluateCricket() {
     promptBar.className = 'prompt-bar win';
     promptTitle.textContent = `+${batsmansRun} RUNS!`;
     promptSub.textContent = amIBatting ? 'Great shot!' : 'Batsman scored.';
-    showToast(`+${batsmansRun} runs scored!`, 'info');
 
     if (cricketState.innings === 2) {
       const needed = cricketState.target - cricketState.runs;
@@ -792,7 +815,6 @@ function startSecondInnings() {
   cricketState.target = cricketState.runs + 1;
   cricketState.runs = 0;
   cricketState.wickets = 0;
-  // Swap roles
   cricketState.battingPlayerId = (cricketState.battingPlayerId === 'me') ? 'opp' : 'me';
 
   cricketRuns.textContent = '0';
@@ -846,16 +868,14 @@ function showEndModal(isMeWinner, desc) {
 }
 
 /* =========================================================
-   COMPLETE CLEAN STATE RESET (Eliminates Replay Glitches)
+   RESTART & RESET STATE MACHINE
    ========================================================= */
-function resetMatchStates() {
-  // Wipe RPS series
+function resetMatchStates(broadcast = true) {
   rpsScoreMe = 0;
   rpsScoreOpp = 0;
   p1Score.textContent = '0';
   p2Score.textContent = '0';
 
-  // Wipe Hand Cricket completely
   cricketState = {
     innings: 1,
     battingPlayerId: null,
@@ -869,7 +889,6 @@ function resetMatchStates() {
   myCricketRole.textContent = 'TOSS';
   cricketMetaMessage.textContent = 'Waiting for toss to initiate...';
 
-  // Wipe Toss
   tossState = {
     active: false,
     format: 'single',
@@ -880,15 +899,22 @@ function resetMatchStates() {
     winnerId: null
   };
 
-  // Close any active modals
+  tossCallStrip.style.display = 'none';
   endModal.classList.remove('open');
   inningsModal.classList.remove('open');
   tossDecisionModal.classList.remove('open');
 
-  showToast('Match restarted! Fresh series initialized.', 'info');
+  if (broadcast && conn) {
+    conn.send({ type: 'reset' });
+  }
 
   if (gameMode === 'cricket') {
-    openTossSetupModal();
+    if (isHost) {
+      if (broadcast && conn) {
+        conn.send({ type: 'init_toss_cycle' });
+      }
+      openTossSetupModal();
+    }
   } else {
     resetTurnUI();
   }
@@ -911,7 +937,6 @@ document.querySelectorAll('.choice-tile').forEach(tile => {
     conn.send({ type: 'locked' });
     conn.send({ type: 'move', choice: myCurrentChoice });
 
-    showToast(`You selected ${myCurrentChoice}`, 'info');
     checkTurnCompletion();
   });
 });
@@ -924,18 +949,14 @@ inningsOkBtn.addEventListener('click', () => {
 });
 
 modalResetBtn.addEventListener('click', () => {
-  if (conn) {
-    conn.send({ type: 'reset' });
-  }
-  resetMatchStates();
+  resetMatchStates(true);
 });
 
-// Click room badge to copy code
 roomBadge.addEventListener('click', () => {
   const code = roomCodeLabel.textContent.replace('ROOM: ', '').trim();
   if (code && code !== '---') {
     navigator.clipboard.writeText(code).then(() => {
-      showToast(`Copied room code "${code}" to clipboard!`, 'success');
+      showToast(`Copied room code "${code}"!`, 'success');
     });
   }
 });
@@ -945,5 +966,4 @@ exitBtn.addEventListener('click', () => window.location.reload());
 soundBtn.addEventListener('click', () => {
   soundOn = !soundOn;
   soundBtn.innerHTML = soundOn ? '<i class="fas fa-volume-up"></i>' : '<i class="fas fa-volume-xmark"></i>';
-  showToast(soundOn ? 'Sound enabled' : 'Sound muted', 'info');
 });
