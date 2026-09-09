@@ -18,11 +18,11 @@ let rpsScoreOpp = 0;
 // Hand Cricket State
 let cricketState = {
   innings: 1,           // 1: Setting target, 2: Chasing target
-  battingPlayerId: 'host', // default host bats first unless toss specifies otherwise
+  battingPlayerId: 'host', // Default: host bats first unless toss is played
   target: 0,
   runs: 0,
   wickets: 0,
-  ballsPlayed: 0        // counts deliveries to lock out manual toss after ball 1
+  ballsPlayed: 0        // Locks out toss button after 1st ball is bowled
 };
 
 // Toss State (Odd/Even Hand Cricket Style)
@@ -201,8 +201,8 @@ function renderParticles() {
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
     }
-    ctx.restore();
   });
   requestAnimationFrame(renderParticles);
 }
@@ -267,7 +267,7 @@ playerNameInput.addEventListener('input', () => {
 });
 
 /* =========================================================
-   P2P PEER CONNECTIONS & PREFIX VALIDATION
+   P2P PEER CONNECTIONS & VALIDATION
    ========================================================= */
 function validateName() {
   const entered = playerNameInput.value.trim();
@@ -291,7 +291,6 @@ function validateAndFormatRoomCode() {
     return null;
   }
 
-  // Ensure prefix exists or prepend active mode prefix
   const expectedPrefix = gameMode === 'cricket' ? 'CRIC-' : 'RPS-';
   if (!raw.startsWith('CRIC-') && !raw.startsWith('RPS-')) {
     raw = `${expectedPrefix}${raw}`;
@@ -316,7 +315,6 @@ createBtn.addEventListener('click', () => {
   p1NameLabel.textContent = myName.toUpperCase();
   lobbyError.textContent = 'Creating room...';
 
-  // Enforce CRIC- or RPS- prefix
   const prefix = gameMode === 'cricket' ? 'CRIC' : 'RPS';
   const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
   const roomKey = `${prefix}-${rand}`;
@@ -386,7 +384,7 @@ function setupConnEvents() {
     conn.send({ type: 'init_sync', mode: gameMode, hostName: myName });
   }
 
-  // Start game immediately with default roles (Host bats first)
+  // Start directly as a fresh match (no toss popup by default)
   if (gameMode === 'cricket') {
     cricketState.ballsPlayed = 0;
     updateTossBtnVisibility();
@@ -412,7 +410,7 @@ function setupConnEvents() {
       disableButtons(false);
       highlightTurn();
     } else if (data.type === 'toss_request') {
-      // Opponent clicked toss or rematch forced toss
+      // Either player pressed Toss button before ball 1
       openTossSetupModal();
     } else if (data.type === 'toss_start') {
       tossState.active = true;
@@ -447,7 +445,7 @@ function setupConnEvents() {
 }
 
 /* =========================================================
-   TOSS SYSTEM & 1ST BALL LOCKOUT
+   TOSS SYSTEM (MANUAL TRIGGER BEFORE 1ST BALL)
    ========================================================= */
 function updateTossBtnVisibility() {
   if (gameMode === 'cricket' && cricketState.ballsPlayed === 0 && !tossState.active) {
@@ -666,7 +664,7 @@ function checkTurnCompletion() {
       } else if (tossState.active) {
         evaluateTossDuel();
       } else {
-        // Lock out toss permanently after 1st ball is bowled
+        // Lock out the manual Toss button permanently once the 1st ball finishes
         cricketState.ballsPlayed++;
         updateTossBtnVisibility();
         evaluateCricket();
@@ -877,6 +875,7 @@ function resetMatchStates(broadcast = true) {
   tossState.joinerWins = 0;
   tossState.round = 1;
 
+  // Fresh game state: direct start with 0 balls played so Toss is available
   cricketState = {
     innings: 1,
     battingPlayerId: 'host',
@@ -890,21 +889,22 @@ function resetMatchStates(broadcast = true) {
   cricketWickets.textContent = '/0';
   targetScoreDisplay.textContent = '--';
 
+  // Ensure all modals (including toss) are dismissed
   endModal.classList.remove('open');
   inningsModal.classList.remove('open');
   tossDecisionModal.classList.remove('open');
+  tossSetupModal.classList.remove('open');
+
+  if (gameMode === 'cricket') {
+    updateTossBtnVisibility();
+    syncCricketRoles();
+  }
 
   resetTurnUI();
+  disableButtons(false);
 
   if (broadcast && conn) {
     conn.send({ type: 'reset' });
-  }
-
-  // After match ends and player clicks "Play Again", redirect directly to Toss
-  if (gameMode === 'cricket') {
-    openTossSetupModal();
-  } else {
-    disableButtons(false);
   }
 }
 
