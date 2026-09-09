@@ -86,7 +86,12 @@
       <!-- Hand Cricket Dashboard -->
       <div class="cricket-board" id="cricketBoard" style="display: none;">
         <div class="cricket-stats-top">
-          <div class="role-pill" id="myCricketRole">TOSS</div>
+          <div class="role-group">
+            <div class="role-pill" id="myCricketRole">BATSMAN</div>
+            <button id="openTossBtn" class="toss-trigger-btn" title="Conduct Toss before 1st ball">
+              <i class="fas fa-coins"></i> TOSS
+            </button>
+          </div>
           <div class="score-container">
             <span class="cricket-score" id="cricketRuns">0</span>
             <span class="cricket-wickets" id="cricketWickets">/0</span>
@@ -96,7 +101,7 @@
             <span class="target-num" id="targetScoreDisplay">--</span>
           </div>
         </div>
-        <div class="cricket-meta" id="cricketMetaMessage">Waiting for toss configuration...</div>
+        <div class="cricket-meta" id="cricketMetaMessage">Game on! Play directly or tap Toss.</div>
       </div>
     </section>
 
