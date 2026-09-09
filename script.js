@@ -4,7 +4,7 @@
 
 let peer = null;
 let conn = null;
-let myName = 'Player';
+let myName = '';
 let oppName = 'Opponent';
 let gameMode = 'rps'; // 'rps' or 'cricket'
 let isHost = false;
@@ -38,6 +38,8 @@ const lobbyError = document.getElementById('lobbyError');
 
 const roomCodeLabel = document.getElementById('roomCodeLabel');
 const roundStatusText = document.getElementById('roundStatusText');
+const p1Card = document.getElementById('p1Card');
+const p2Card = document.getElementById('p2Card');
 const p1NameLabel = document.getElementById('p1NameLabel');
 const p2NameLabel = document.getElementById('p2NameLabel');
 const p1Score = document.getElementById('p1Score');
@@ -170,7 +172,7 @@ function renderParticles() {
 renderParticles();
 
 /* =========================================================
-   GAME MODE TOGGLER (LOBBY)
+   LOBBY / MODE SWITCHING
    ========================================================= */
 modeButtons.forEach(btn => {
   btn.addEventListener('click', () => {
@@ -179,6 +181,13 @@ modeButtons.forEach(btn => {
     gameMode = btn.getAttribute('data-game');
   });
 });
+
+function setGameMode(targetMode) {
+  gameMode = targetMode;
+  modeButtons.forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-game') === targetMode);
+  });
+}
 
 function applyGameModeUI() {
   if (gameMode === 'cricket') {
@@ -200,23 +209,54 @@ function applyGameModeUI() {
   }
 }
 
+// Auto-detect prefix when pasting room code
+roomCodeInput.addEventListener('input', () => {
+  const val = roomCodeInput.value.trim().toUpperCase();
+  if (val.startsWith('CRIC-')) {
+    setGameMode('cricket');
+  } else if (val.startsWith('RPS-')) {
+    setGameMode('rps');
+  }
+});
+
 /* =========================================================
-   P2P PEER CONNECTIONS
+   P2P PEER CONNECTIONS & VALIDATION
    ========================================================= */
+function validateName() {
+  const entered = playerNameInput.value.trim();
+  if (!entered) {
+    playerNameInput.classList.add('input-error');
+    lobbyError.textContent = 'Please enter your name to proceed!';
+    playerNameInput.focus();
+    return null;
+  }
+  playerNameInput.classList.remove('input-error');
+  lobbyError.textContent = '';
+  return entered;
+}
+
 createBtn.addEventListener('click', () => {
+  const validName = validateName();
+  if (!validName) return;
+
   isHost = true;
-  myName = playerNameInput.value.trim() || 'Host';
+  myName = validName;
   p1NameLabel.textContent = myName.toUpperCase();
   lobbyError.textContent = 'Creating room...';
 
-  const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-  peer = new Peer(`duel-${code}`);
+  // Specific game prefixes ensure routing
+  const prefix = gameMode === 'cricket' ? 'CRIC' : 'RPS';
+  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const roomKey = `${prefix}-${rand}`;
+
+  peer = new Peer(`duel-${roomKey}`);
 
   peer.on('open', () => {
-    roomCodeLabel.textContent = `ROOM: ${code}`;
+    roomCodeLabel.textContent = `ROOM: ${roomKey}`;
     lobbyScreen.classList.add('hidden');
     roundStatusText.textContent = 'Waiting for opponent...';
     applyGameModeUI();
+    highlightTurn();
     disableButtons(true);
   });
 
@@ -231,29 +271,40 @@ createBtn.addEventListener('click', () => {
 });
 
 joinBtn.addEventListener('click', () => {
-  isHost = false;
-  const code = roomCodeInput.value.trim().toUpperCase();
-  myName = playerNameInput.value.trim() || 'Challenger';
+  const validName = validateName();
+  if (!validName) return;
 
-  if (!code) {
-    lobbyError.textContent = 'Enter 4-digit code!';
+  const rawCode = roomCodeInput.value.trim().toUpperCase();
+  if (!rawCode) {
+    lobbyError.textContent = 'Please enter room code!';
     return;
   }
 
-  lobbyError.textContent = 'Connecting...';
+  // Detect and enforce game mode from room code
+  if (rawCode.startsWith('CRIC-')) {
+    setGameMode('cricket');
+  } else if (rawCode.startsWith('RPS-')) {
+    setGameMode('rps');
+  }
+
+  isHost = false;
+  myName = validName;
   p1NameLabel.textContent = myName.toUpperCase();
+  lobbyError.textContent = 'Connecting...';
+
   peer = new Peer();
 
   peer.on('open', () => {
-    conn = peer.connect(`duel-${code}`);
+    conn = peer.connect(`duel-${rawCode}`);
     conn.on('open', () => {
-      roomCodeLabel.textContent = `ROOM: ${code}`;
+      roomCodeLabel.textContent = `ROOM: ${rawCode}`;
+      applyGameModeUI();
       lobbyScreen.classList.add('hidden');
       setupConnEvents();
       conn.send({ type: 'handshake', name: myName });
     });
     conn.on('error', () => {
-      lobbyError.textContent = 'Room not found!';
+      lobbyError.textContent = 'Room not found! Check code.';
     });
   });
 
@@ -267,7 +318,6 @@ function setupConnEvents() {
   oppActionState.textContent = 'Ready';
   disableButtons(false);
 
-  // Host syncs game mode & starts cricket role allocation
   if (isHost) {
     conn.send({ type: 'init_sync', mode: gameMode, hostName: myName });
     if (gameMode === 'cricket') {
@@ -275,6 +325,8 @@ function setupConnEvents() {
       syncCricketRoles();
     }
   }
+
+  highlightTurn();
 
   conn.on('data', data => {
     if (data.type === 'handshake') {
@@ -289,6 +341,7 @@ function setupConnEvents() {
         cricketState.battingPlayerId = 'opp'; // Joiner bowls first
         syncCricketRoles();
       }
+      highlightTurn();
     } else if (data.type === 'locked') {
       oppActionState.textContent = 'Locked!';
     } else if (data.type === 'move') {
@@ -304,6 +357,21 @@ function setupConnEvents() {
     oppActionState.textContent = 'Disconnected';
     disableButtons(true);
   });
+}
+
+/* =========================================================
+   TURN HIGHLIGHTING LOGIC
+   ========================================================= */
+function highlightTurn() {
+  if (gameMode === 'cricket') {
+    const amIBatting = cricketState.battingPlayerId === 'me';
+    p1Card.classList.toggle('turn-active', amIBatting);
+    p2Card.classList.toggle('turn-active', !amIBatting);
+  } else {
+    // In RPS both players choose simultaneously
+    p1Card.classList.toggle('turn-active', !isLocked);
+    p2Card.classList.toggle('turn-active', oppActionState.textContent !== 'Locked!');
+  }
 }
 
 /* =========================================================
@@ -374,7 +442,7 @@ function evaluateRPS() {
 }
 
 /* =========================================================
-   HAND CRICKET (1-6) REAL-TIME CALCULATOR ENGINE
+   HAND CRICKET (1-6) REAL-TIME ENGINE
    ========================================================= */
 function syncCricketRoles() {
   const amIBatting = cricketState.battingPlayerId === 'me';
@@ -385,8 +453,8 @@ function syncCricketRoles() {
   if (cricketState.innings === 1) {
     targetScoreDisplay.textContent = '--';
     cricketMetaMessage.textContent = amIBatting
-      ? '1st Innings: Score as many runs as you can!'
-      : '1st Innings: Bowl to get the batsman out!';
+      ? `1st Innings: ${myName}, score as many as you can!`
+      : `1st Innings: ${oppName} is batting, take the wicket!`;
   } else {
     targetScoreDisplay.textContent = cricketState.target;
     const needed = cricketState.target - cricketState.runs;
@@ -394,6 +462,7 @@ function syncCricketRoles() {
       ? `2nd Innings: Need ${needed} runs to win!`
       : `2nd Innings: Defend ${cricketState.target} runs!`;
   }
+  highlightTurn();
 }
 
 function evaluateCricket() {
@@ -406,7 +475,7 @@ function evaluateCricket() {
   const amIBatting = cricketState.battingPlayerId === 'me';
   const batsmansRun = amIBatting ? myPick : oppPick;
 
-  // Check OUT condition (both throw identical number 1-6)
+  // Check OUT condition
   if (myPick === oppPick) {
     AudioFX.out();
     promptBar.className = 'prompt-bar out';
@@ -416,13 +485,11 @@ function evaluateCricket() {
     cricketWickets.textContent = '/1';
 
     if (cricketState.innings === 1) {
-      // Transition to Innings 2
       setTimeout(() => {
         cricketState.innings = 2;
         cricketState.target = cricketState.runs + 1;
         cricketState.runs = 0;
         cricketState.wickets = 0;
-        // Swap roles
         cricketState.battingPlayerId = amIBatting ? 'opp' : 'me';
 
         cricketRuns.textContent = '0';
@@ -431,34 +498,30 @@ function evaluateCricket() {
         resetTurnUI();
       }, 2000);
     } else {
-      // Innings 2 completed with wicket -> Bowler wins
       const bowlerWon = !amIBatting;
       setTimeout(() => {
         showEndModal(bowlerWon, bowlerWon
           ? `Target defended! Opponent fell short by ${cricketState.target - cricketState.runs} runs.`
-          : `You were bowled out! Needed ${cricketState.target - cricketState.runs} more runs.`);
+          : `Bowled out! Needed ${cricketState.target - cricketState.runs} more runs.`);
       }, 1000);
     }
   } else {
-    // Add runs
     cricketState.runs += batsmansRun;
     cricketRuns.textContent = cricketState.runs;
     AudioFX.tap();
 
     promptBar.className = 'prompt-bar win';
     promptTitle.textContent = `+${batsmansRun} RUNS!`;
-    promptSub.textContent = amIBatting ? 'Good shot!' : 'Batsman scored.';
+    promptSub.textContent = amIBatting ? 'Great shot!' : 'Batsman scored.';
 
-    // Check if 2nd Innings Target achieved
     if (cricketState.innings === 2) {
       const needed = cricketState.target - cricketState.runs;
       if (cricketState.runs >= cricketState.target) {
-        // Chased successfully
         const chaserWon = amIBatting;
         setTimeout(() => {
           showEndModal(chaserWon, chaserWon
-            ? `Target reached! Sensational chase!`
-            : `Opponent chased down target of ${cricketState.target}!`);
+            ? `Target reached! Tremendous run-chase!`
+            : `Opponent chased down the target of ${cricketState.target}!`);
         }, 1000);
         return;
       } else {
@@ -500,6 +563,7 @@ function resetTurnUI() {
     oppDisplay.innerHTML = `<i class="fas fa-baseball-bat-ball"></i>`;
   }
   disableButtons(false);
+  highlightTurn();
 }
 
 function showEndModal(isMeWinner, desc) {
@@ -533,7 +597,7 @@ function resetMatchStates() {
   resetTurnUI();
 }
 
-// User Move Click
+// User Move Selection
 document.querySelectorAll('.choice-tile').forEach(tile => {
   tile.addEventListener('click', () => {
     if (isLocked || !conn) return;
@@ -542,6 +606,7 @@ document.querySelectorAll('.choice-tile').forEach(tile => {
     tile.classList.add('active-pick');
     myActionState.textContent = 'Locked!';
     disableButtons(true);
+    highlightTurn();
     AudioFX.tap();
 
     conn.send({ type: 'locked' });
