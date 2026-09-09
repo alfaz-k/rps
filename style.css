@@ -81,7 +81,7 @@ body {
   gap: 8px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
-  padding: 6px 12px;
+  padding: 6px 14px;
   border-radius: 30px;
   font-family: var(--font-title);
   font-size: 0.75rem;
@@ -136,12 +136,29 @@ body {
   text-align: center;
 }
 
+.side-score {
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  transition: var(--trans);
+}
+
+/* Active Turn Highlighting */
+.side-score.turn-active {
+  background: rgba(0, 240, 255, 0.12);
+  border: 1px solid var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.25);
+}
+
 .side-score .player-name {
   display: block;
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
+}
+
+.side-score.turn-active .player-name {
+  color: var(--accent-cyan);
 }
 
 .side-score .score-digit {
@@ -403,6 +420,12 @@ body {
   color: var(--text-pure);
 }
 
+/* Required Indicator */
+.required-star {
+  color: var(--accent-red);
+  font-weight: bold;
+}
+
 /* Lobby Overlay */
 .lobby-overlay {
   position: fixed;
@@ -504,6 +527,10 @@ body {
 
 .field-group input:focus {
   border-color: var(--accent-cyan);
+}
+
+.field-group input.input-error {
+  border-color: var(--accent-red);
 }
 
 .btn-cluster {
