@@ -1,106 +1,122 @@
 /* =========================================================
-   ZERO-CONFIG PEER-TO-PEER WEBRTC RPS CONTROLLER
+   CLEAN PEER-TO-PEER RPS & HAND CRICKET CONTROLLER
    ========================================================= */
 
 let peer = null;
-let connection = null;
+let conn = null;
 let myName = 'Player';
-let opponentName = 'Opponent';
-
-let myScore = 0;
-let oppScore = 0;
-let myMove = null;
-let oppMove = null;
+let oppName = 'Opponent';
+let gameMode = 'rps'; // 'rps' or 'cricket'
+let isHost = false;
 let isLocked = false;
-let soundEnabled = true;
+let soundOn = true;
 
-const weapons = {
-  rock: { icon: 'fa-hand-back-fist', beats: 'scissors', label: 'Rock' },
-  paper: { icon: 'fa-hand', beats: 'rock', label: 'Paper' },
-  scissors: { icon: 'fa-hand-scissors', beats: 'paper', label: 'Scissors' }
+// RPS State
+let rpsScoreMe = 0;
+let rpsScoreOpp = 0;
+
+// Hand Cricket State
+let cricketState = {
+  innings: 1,           // 1: Setting target, 2: Chasing target
+  battingPlayerId: null,// 'me' or 'opp'
+  target: 0,
+  runs: 0,
+  wickets: 0
 };
 
-// DOM References
+let myCurrentChoice = null;
+let oppCurrentChoice = null;
+
+// Element References
 const lobbyScreen = document.getElementById('lobbyScreen');
+const modeButtons = document.querySelectorAll('.mode-btn');
 const playerNameInput = document.getElementById('playerNameInput');
 const roomCodeInput = document.getElementById('roomCodeInput');
-const joinBtn = document.getElementById('joinBtn');
 const createBtn = document.getElementById('createBtn');
+const joinBtn = document.getElementById('joinBtn');
 const lobbyError = document.getElementById('lobbyError');
 
-const activeRoomCode = document.getElementById('activeRoomCode');
-const player1Name = document.getElementById('player1Name');
-const player2Name = document.getElementById('player2Name');
-const player1Score = document.getElementById('player1Score');
-const player2Score = document.getElementById('player2Score');
-const player1Pips = document.getElementById('player1Pips');
-const player2Pips = document.getElementById('player2Pips');
-const roomStatusText = document.getElementById('roomStatusText');
+const roomCodeLabel = document.getElementById('roomCodeLabel');
+const roundStatusText = document.getElementById('roundStatusText');
+const p1NameLabel = document.getElementById('p1NameLabel');
+const p2NameLabel = document.getElementById('p2NameLabel');
+const p1Score = document.getElementById('p1Score');
+const p2Score = document.getElementById('p2Score');
 
-const myHand = document.getElementById('myHand');
-const opponentHand = document.getElementById('opponentHand');
-const myStatusTag = document.getElementById('myStatusTag');
-const opponentStatusTag = document.getElementById('opponentStatusTag');
+const rpsBoard = document.getElementById('rpsBoard');
+const cricketBoard = document.getElementById('cricketBoard');
+const rpsDeck = document.getElementById('rpsDeck');
+const cricketDeck = document.getElementById('cricketDeck');
+const gameTypeBadge = document.getElementById('gameTypeBadge');
 
-const resultBanner = document.getElementById('resultBanner');
-const resultTitle = document.getElementById('resultTitle');
-const resultSubtitle = document.getElementById('resultSubtitle');
-const choiceButtons = document.querySelectorAll('.choice-btn');
-const soundToggle = document.getElementById('soundToggle');
-const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+const myCricketRole = document.getElementById('myCricketRole');
+const cricketRuns = document.getElementById('cricketRuns');
+const cricketWickets = document.getElementById('cricketWickets');
+const targetScoreDisplay = document.getElementById('targetScoreDisplay');
+const cricketMetaMessage = document.getElementById('cricketMetaMessage');
 
-const matchModal = document.getElementById('matchModal');
-const modalTitle = document.getElementById('modalTitle');
-const modalDesc = document.getElementById('modalDesc');
-const modalIcon = document.getElementById('modalIcon');
-const modalPlayAgain = document.getElementById('modalPlayAgain');
-const currentYear = document.getElementById('currentYear');
+const myDisplay = document.getElementById('myDisplay');
+const oppDisplay = document.getElementById('oppDisplay');
+const myActionState = document.getElementById('myActionState');
+const oppActionState = document.getElementById('oppActionState');
 
-currentYear.textContent = new Date().getFullYear();
+const promptBar = document.getElementById('promptBar');
+const promptTitle = document.getElementById('promptTitle');
+const promptSub = document.getElementById('promptSub');
+
+const soundBtn = document.getElementById('soundBtn');
+const exitBtn = document.getElementById('exitBtn');
+
+const endModal = document.getElementById('endModal');
+const modalBadgeIcon = document.getElementById('modalBadgeIcon');
+const modalWinnerHeading = document.getElementById('modalWinnerHeading');
+const modalWinnerDesc = document.getElementById('modalWinnerDesc');
+const modalResetBtn = document.getElementById('modalResetBtn');
+const yearEl = document.getElementById('yearEl');
+
+yearEl.textContent = new Date().getFullYear();
 
 /* =========================================================
-   SYNTHESIZED AUDIO FX (Web Audio API)
+   SYNTHESIZED AUDIO
    ========================================================= */
-const AudioEngine = {
+const AudioFX = {
   ctx: null,
   init() {
     if (!this.ctx) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      this.ctx = new AudioCtx();
+      const AC = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AC();
     }
   },
-  playTone(freq, type, duration, gainVal = 0.1) {
-    if (!soundEnabled) return;
+  play(freq, type = 'sine', dur = 0.1) {
+    if (!soundOn) return;
     try {
       this.init();
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       osc.type = type;
       osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-      gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+      gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + dur);
       osc.connect(gain);
       gain.connect(this.ctx.destination);
       osc.start();
-      osc.stop(this.ctx.currentTime + duration);
+      osc.stop(this.ctx.currentTime + dur);
     } catch (e) {}
   },
-  click() { this.playTone(400, 'sine', 0.06, 0.05); },
-  clash() { this.playTone(180, 'triangle', 0.12, 0.08); },
+  tap() { this.play(400, 'sine', 0.05); },
   win() {
-    setTimeout(() => this.playTone(523.25, 'sine', 0.15), 0);
-    setTimeout(() => this.playTone(659.25, 'sine', 0.15), 100);
-    setTimeout(() => this.playTone(783.99, 'sine', 0.25), 200);
+    setTimeout(() => this.play(523, 'sine', 0.12), 0);
+    setTimeout(() => this.play(659, 'sine', 0.12), 100);
+    setTimeout(() => this.play(783, 'sine', 0.2), 200);
   },
-  lose() {
-    setTimeout(() => this.playTone(329.63, 'sawtooth', 0.15, 0.08), 0);
-    setTimeout(() => this.playTone(261.63, 'sawtooth', 0.25, 0.08), 120);
-  },
-  tie() { this.playTone(320, 'square', 0.15, 0.04); }
+  out() {
+    setTimeout(() => this.play(260, 'sawtooth', 0.2), 0);
+    setTimeout(() => this.play(180, 'sawtooth', 0.3), 150);
+  }
 };
 
 /* =========================================================
-   CANVAS PARTICLES (Confetti)
+   CANVAS PARTICLES
    ========================================================= */
 const canvas = document.getElementById('particleCanvas');
 const ctx = canvas.getContext('2d');
@@ -113,19 +129,19 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-function triggerConfetti() {
+function blastConfetti() {
   particles = [];
-  const colors = ['#00f0ff', '#ff2a85', '#ffd60a', '#05ffa1', '#9d4edd'];
-  for (let i = 0; i < 70; i++) {
+  const palette = ['#00f0ff', '#ff2a85', '#ffd60a', '#05ffa1'];
+  for (let i = 0; i < 50; i++) {
     particles.push({
       x: window.innerWidth / 2,
       y: window.innerHeight / 2,
-      vx: (Math.random() - 0.5) * 14,
-      vy: (Math.random() - 0.7) * 16,
-      size: Math.random() * 6 + 4,
-      color: colors[Math.floor(Math.random() * colors.length)],
+      vx: (Math.random() - 0.5) * 12,
+      vy: (Math.random() - 0.7) * 14,
+      size: Math.random() * 5 + 3,
+      color: palette[Math.floor(Math.random() * palette.length)],
       alpha: 1,
-      decay: Math.random() * 0.02 + 0.015
+      decay: Math.random() * 0.02 + 0.02
     });
   }
 }
@@ -135,9 +151,8 @@ function renderParticles() {
   particles.forEach((p, idx) => {
     p.x += p.vx;
     p.y += p.vy;
-    p.vy += 0.35;
+    p.vy += 0.3;
     p.alpha -= p.decay;
-
     if (p.alpha <= 0) {
       particles.splice(idx, 1);
     } else {
@@ -155,268 +170,395 @@ function renderParticles() {
 renderParticles();
 
 /* =========================================================
-   WEBRTC PEER-TO-PEER ENGINE
+   GAME MODE TOGGLER (LOBBY)
    ========================================================= */
-
-// Create Room (Host)
-createBtn.addEventListener('click', () => {
-  myName = playerNameInput.value.trim() || 'Host';
-  player1Name.textContent = myName.toUpperCase();
-  lobbyError.textContent = 'Generating room...';
-
-  // 4-digit readable room code
-  const roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
-  const fullPeerId = `rps-duel-${roomCode}`;
-
-  peer = new Peer(fullPeerId);
-
-  peer.on('open', () => {
-    lobbyScreen.classList.add('hidden');
-    activeRoomCode.textContent = `ROOM: ${roomCode}`;
-    roomStatusText.textContent = `Share code "${roomCode}" with friend`;
-    opponentStatusTag.textContent = 'Waiting for friend...';
-    enableInputs(false);
-  });
-
-  peer.on('connection', (conn) => {
-    connection = conn;
-    setupConnectionListeners();
-  });
-
-  peer.on('error', (err) => {
-    console.error(err);
-    if (err.type === 'unavailable-id') {
-      lobbyError.textContent = 'Room busy, tap Create Room again.';
-    } else {
-      lobbyError.textContent = 'Connection error. Retrying...';
-    }
+modeButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    modeButtons.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    gameMode = btn.getAttribute('data-game');
   });
 });
 
-// Join Room (Guest)
+function applyGameModeUI() {
+  if (gameMode === 'cricket') {
+    rpsBoard.style.display = 'none';
+    rpsDeck.style.display = 'none';
+    cricketBoard.style.display = 'flex';
+    cricketDeck.style.display = 'grid';
+    gameTypeBadge.textContent = 'CRICKET';
+    myDisplay.innerHTML = `<i class="fas fa-baseball-bat-ball"></i>`;
+    oppDisplay.innerHTML = `<i class="fas fa-baseball-bat-ball"></i>`;
+  } else {
+    rpsBoard.style.display = 'grid';
+    rpsDeck.style.display = 'grid';
+    cricketBoard.style.display = 'none';
+    cricketDeck.style.display = 'none';
+    gameTypeBadge.textContent = 'RPS';
+    myDisplay.innerHTML = `<i class="fas fa-hand-back-fist"></i>`;
+    oppDisplay.innerHTML = `<i class="fas fa-hand-back-fist"></i>`;
+  }
+}
+
+/* =========================================================
+   P2P PEER CONNECTIONS
+   ========================================================= */
+createBtn.addEventListener('click', () => {
+  isHost = true;
+  myName = playerNameInput.value.trim() || 'Host';
+  p1NameLabel.textContent = myName.toUpperCase();
+  lobbyError.textContent = 'Creating room...';
+
+  const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+  peer = new Peer(`duel-${code}`);
+
+  peer.on('open', () => {
+    roomCodeLabel.textContent = `ROOM: ${code}`;
+    lobbyScreen.classList.add('hidden');
+    roundStatusText.textContent = 'Waiting for opponent...';
+    applyGameModeUI();
+    disableButtons(true);
+  });
+
+  peer.on('connection', c => {
+    conn = c;
+    setupConnEvents();
+  });
+
+  peer.on('error', () => {
+    lobbyError.textContent = 'Room error. Tap create again.';
+  });
+});
+
 joinBtn.addEventListener('click', () => {
+  isHost = false;
   const code = roomCodeInput.value.trim().toUpperCase();
   myName = playerNameInput.value.trim() || 'Challenger';
 
   if (!code) {
-    lobbyError.textContent = 'Please enter a 4-digit room code!';
+    lobbyError.textContent = 'Enter 4-digit code!';
     return;
   }
 
-  lobbyError.textContent = 'Connecting to room...';
-  player1Name.textContent = myName.toUpperCase();
-
-  peer = new Peer(); // Random ID for joiner
+  lobbyError.textContent = 'Connecting...';
+  p1NameLabel.textContent = myName.toUpperCase();
+  peer = new Peer();
 
   peer.on('open', () => {
-    const targetPeerId = `rps-duel-${code}`;
-    connection = peer.connect(targetPeerId, { reliable: true });
-
-    connection.on('open', () => {
+    conn = peer.connect(`duel-${code}`);
+    conn.on('open', () => {
+      roomCodeLabel.textContent = `ROOM: ${code}`;
       lobbyScreen.classList.add('hidden');
-      activeRoomCode.textContent = `ROOM: ${code}`;
-      setupConnectionListeners();
-      // Introduce name to host
-      connection.send({ type: 'handshake', name: myName });
+      setupConnEvents();
+      conn.send({ type: 'handshake', name: myName });
     });
-
-    connection.on('error', () => {
-      lobbyError.textContent = 'Failed to find room. Check code!';
+    conn.on('error', () => {
+      lobbyError.textContent = 'Room not found!';
     });
   });
 
-  peer.on('error', (err) => {
-    lobbyError.textContent = 'Room not found or expired.';
+  peer.on('error', () => {
+    lobbyError.textContent = 'Unable to connect to room.';
   });
 });
 
-function setupConnectionListeners() {
-  roomStatusText.textContent = 'Opponent Connected!';
-  opponentStatusTag.textContent = 'Ready';
-  enableInputs(true);
+function setupConnEvents() {
+  roundStatusText.textContent = 'Opponent connected!';
+  oppActionState.textContent = 'Ready';
+  disableButtons(false);
 
-  // Send handshake if host
-  connection.send({ type: 'handshake', name: myName });
+  // Host syncs game mode & starts cricket role allocation
+  if (isHost) {
+    conn.send({ type: 'init_sync', mode: gameMode, hostName: myName });
+    if (gameMode === 'cricket') {
+      cricketState.battingPlayerId = 'me'; // Host bats first
+      syncCricketRoles();
+    }
+  }
 
-  connection.on('data', (data) => {
+  conn.on('data', data => {
     if (data.type === 'handshake') {
-      opponentName = data.name || 'Opponent';
-      player2Name.textContent = opponentName.toUpperCase();
+      oppName = data.name || 'Opponent';
+      p2NameLabel.textContent = oppName.toUpperCase();
+    } else if (data.type === 'init_sync') {
+      gameMode = data.mode;
+      oppName = data.hostName || 'Host';
+      p2NameLabel.textContent = oppName.toUpperCase();
+      applyGameModeUI();
+      if (gameMode === 'cricket') {
+        cricketState.battingPlayerId = 'opp'; // Joiner bowls first
+        syncCricketRoles();
+      }
     } else if (data.type === 'locked') {
-      opponentStatusTag.textContent = 'Locked move!';
+      oppActionState.textContent = 'Locked!';
     } else if (data.type === 'move') {
-      oppMove = data.choice;
-      checkRoundCompletion();
-    } else if (data.type === 'restart') {
-      resetWholeMatch();
+      oppCurrentChoice = data.choice;
+      checkTurnCompletion();
+    } else if (data.type === 'reset') {
+      resetMatchStates();
     }
   });
 
-  connection.on('close', () => {
-    roomStatusText.textContent = 'Opponent disconnected.';
-    opponentStatusTag.textContent = 'Left room';
-    enableInputs(false);
+  conn.on('close', () => {
+    roundStatusText.textContent = 'Opponent left.';
+    oppActionState.textContent = 'Disconnected';
+    disableButtons(true);
   });
-}
-
-function checkRoundCompletion() {
-  if (myMove && oppMove) {
-    executeClashAnimation(myMove, oppMove);
-  }
-}
-
-function executeClashAnimation(p1Choice, p2Choice) {
-  enableInputs(false);
-
-  myHand.innerHTML = `<i class="fas fa-fist-raised"></i>`;
-  opponentHand.innerHTML = `<i class="fas fa-fist-raised"></i>`;
-  myHand.classList.add('shake-player');
-  opponentHand.classList.add('shake-bot');
-
-  resultBanner.className = 'result-banner';
-  resultTitle.textContent = 'DUEL CLASH...';
-  resultSubtitle.textContent = 'Revealing selections...';
-  AudioEngine.clash();
-
-  setTimeout(() => {
-    myHand.classList.remove('shake-player');
-    opponentHand.classList.remove('shake-bot');
-
-    myHand.innerHTML = `<i class="fas ${weapons[p1Choice].icon}"></i>`;
-    opponentHand.innerHTML = `<i class="fas ${weapons[p2Choice].icon}"></i>`;
-
-    if (p1Choice === p2Choice) {
-      resultBanner.className = 'result-banner tie';
-      resultTitle.textContent = 'STANDOFF TIE!';
-      resultSubtitle.textContent = `Both selected ${weapons[p1Choice].label}!`;
-      AudioEngine.tie();
-    } else if (weapons[p1Choice].beats === p2Choice) {
-      myScore++;
-      resultBanner.className = 'result-banner win';
-      resultTitle.textContent = 'ROUND VICTORY!';
-      resultSubtitle.textContent = `${weapons[p1Choice].label} defeats ${weapons[p2Choice].label}!`;
-      AudioEngine.win();
-      triggerConfetti();
-    } else {
-      oppScore++;
-      resultBanner.className = 'result-banner lose';
-      resultTitle.textContent = 'ROUND DEFEAT!';
-      resultSubtitle.textContent = `${weapons[p2Choice].label} beats ${weapons[p1Choice].label}!`;
-      AudioEngine.lose();
-    }
-
-    player1Score.textContent = myScore;
-    player2Score.textContent = oppScore;
-    updatePips();
-
-    if (myScore >= 3 || oppScore >= 3) {
-      setTimeout(() => {
-        showMatchWinner(myScore >= 3);
-      }, 1000);
-    } else {
-      setTimeout(() => {
-        resetTurn();
-        enableInputs(true);
-      }, 2500);
-    }
-  }, 900);
-}
-
-function showMatchWinner(didIWin) {
-  modalTitle.textContent = didIWin ? 'SERIES VICTORY!' : 'SERIES DEFEAT!';
-  modalDesc.textContent = didIWin 
-    ? `Spectacular moves! You defeated ${opponentName} in Best of 5!`
-    : `${opponentName} took the victory this series. Challenge them again!`;
-
-  modalIcon.innerHTML = didIWin 
-    ? '<i class="fas fa-trophy" style="color: #05ffa1"></i>' 
-    : '<i class="fas fa-skull" style="color: #ff3366"></i>';
-
-  if (didIWin) triggerConfetti();
-  matchModal.classList.add('active');
-}
-
-function updatePips() {
-  renderPips(player1Pips, myScore, 3);
-  renderPips(player2Pips, oppScore, 3);
-}
-
-function renderPips(container, score, max) {
-  container.innerHTML = '';
-  for (let i = 0; i < max; i++) {
-    const pip = document.createElement('div');
-    pip.className = `pip ${i < score ? 'filled' : ''}`;
-    container.appendChild(pip);
-  }
-}
-
-function enableInputs(enable) {
-  choiceButtons.forEach(btn => {
-    btn.disabled = !enable;
-    if (enable) btn.classList.remove('selected');
-  });
-}
-
-function resetTurn() {
-  myMove = null;
-  oppMove = null;
-  isLocked = false;
-  myHand.innerHTML = `<i class="fas fa-fist-raised"></i>`;
-  opponentHand.innerHTML = `<i class="fas fa-fist-raised"></i>`;
-  myStatusTag.textContent = 'Your Move';
-  opponentStatusTag.textContent = connection ? 'Ready' : 'Waiting...';
-  resultBanner.className = 'result-banner';
-  resultTitle.textContent = 'LOCK YOUR CHOICE';
-  resultSubtitle.textContent = 'Tap an action below to strike';
-}
-
-function resetWholeMatch() {
-  myScore = 0;
-  oppScore = 0;
-  player1Score.textContent = '0';
-  player2Score.textContent = '0';
-  updatePips();
-  resetTurn();
-  matchModal.classList.remove('active');
-  enableInputs(true);
 }
 
 /* =========================================================
-   USER ACTIONS
+   TURN EVALUATION ENGINE
    ========================================================= */
+function checkTurnCompletion() {
+  if (myCurrentChoice !== null && oppCurrentChoice !== null) {
+    disableButtons(true);
+    myDisplay.classList.add('shaking');
+    oppDisplay.classList.add('shaking');
 
-choiceButtons.forEach(btn => {
-  btn.addEventListener('click', () => {
-    if (isLocked || !connection) return;
+    setTimeout(() => {
+      myDisplay.classList.remove('shaking');
+      oppDisplay.classList.remove('shaking');
+
+      if (gameMode === 'rps') {
+        evaluateRPS();
+      } else {
+        evaluateCricket();
+      }
+    }, 700);
+  }
+}
+
+/* =========================================================
+   ROCK PAPER SCISSORS LOGIC
+   ========================================================= */
+const rpsIcons = {
+  rock: 'fa-hand-back-fist',
+  paper: 'fa-hand',
+  scissors: 'fa-hand-scissors'
+};
+
+function evaluateRPS() {
+  myDisplay.innerHTML = `<i class="fas ${rpsIcons[myCurrentChoice]}"></i>`;
+  oppDisplay.innerHTML = `<i class="fas ${rpsIcons[oppCurrentChoice]}"></i>`;
+
+  const beats = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
+
+  if (myCurrentChoice === oppCurrentChoice) {
+    promptBar.className = 'prompt-bar';
+    promptTitle.textContent = 'STANDOFF!';
+    promptSub.textContent = 'Both chose identical hands.';
+  } else if (beats[myCurrentChoice] === oppCurrentChoice) {
+    rpsScoreMe++;
+    promptBar.className = 'prompt-bar win';
+    promptTitle.textContent = 'ROUND WON!';
+    promptSub.textContent = `${myCurrentChoice.toUpperCase()} beats ${oppCurrentChoice.toUpperCase()}`;
+    AudioFX.win();
+    blastConfetti();
+  } else {
+    rpsScoreOpp++;
+    promptBar.className = 'prompt-bar lose';
+    promptTitle.textContent = 'ROUND LOST!';
+    promptSub.textContent = `${oppCurrentChoice.toUpperCase()} counters ${myCurrentChoice.toUpperCase()}`;
+  }
+
+  p1Score.textContent = rpsScoreMe;
+  p2Score.textContent = rpsScoreOpp;
+
+  if (rpsScoreMe >= 3 || rpsScoreOpp >= 3) {
+    setTimeout(() => {
+      showEndModal(rpsScoreMe >= 3, `Best of 5 finished: ${rpsScoreMe}-${rpsScoreOpp}`);
+    }, 800);
+  } else {
+    setTimeout(resetTurnUI, 2000);
+  }
+}
+
+/* =========================================================
+   HAND CRICKET (1-6) REAL-TIME CALCULATOR ENGINE
+   ========================================================= */
+function syncCricketRoles() {
+  const amIBatting = cricketState.battingPlayerId === 'me';
+  myCricketRole.textContent = amIBatting ? 'BATSMAN' : 'BOWLER';
+  myCricketRole.style.color = amIBatting ? 'var(--accent-green)' : 'var(--accent-cyan)';
+  myCricketRole.style.borderColor = amIBatting ? 'var(--accent-green)' : 'var(--accent-cyan)';
+
+  if (cricketState.innings === 1) {
+    targetScoreDisplay.textContent = '--';
+    cricketMetaMessage.textContent = amIBatting
+      ? '1st Innings: Score as many runs as you can!'
+      : '1st Innings: Bowl to get the batsman out!';
+  } else {
+    targetScoreDisplay.textContent = cricketState.target;
+    const needed = cricketState.target - cricketState.runs;
+    cricketMetaMessage.textContent = amIBatting
+      ? `2nd Innings: Need ${needed} runs to win!`
+      : `2nd Innings: Defend ${cricketState.target} runs!`;
+  }
+}
+
+function evaluateCricket() {
+  const myPick = parseInt(myCurrentChoice, 10);
+  const oppPick = parseInt(oppCurrentChoice, 10);
+
+  myDisplay.innerHTML = `<span style="font-family:var(--font-title);font-size:2rem;font-weight:900">${myPick}</span>`;
+  oppDisplay.innerHTML = `<span style="font-family:var(--font-title);font-size:2rem;font-weight:900">${oppPick}</span>`;
+
+  const amIBatting = cricketState.battingPlayerId === 'me';
+  const batsmansRun = amIBatting ? myPick : oppPick;
+
+  // Check OUT condition (both throw identical number 1-6)
+  if (myPick === oppPick) {
+    AudioFX.out();
+    promptBar.className = 'prompt-bar out';
+    promptTitle.textContent = 'WICKET! OUT!';
+    promptSub.textContent = `Both chose ${myPick}!`;
+
+    cricketWickets.textContent = '/1';
+
+    if (cricketState.innings === 1) {
+      // Transition to Innings 2
+      setTimeout(() => {
+        cricketState.innings = 2;
+        cricketState.target = cricketState.runs + 1;
+        cricketState.runs = 0;
+        cricketState.wickets = 0;
+        // Swap roles
+        cricketState.battingPlayerId = amIBatting ? 'opp' : 'me';
+
+        cricketRuns.textContent = '0';
+        cricketWickets.textContent = '/0';
+        syncCricketRoles();
+        resetTurnUI();
+      }, 2000);
+    } else {
+      // Innings 2 completed with wicket -> Bowler wins
+      const bowlerWon = !amIBatting;
+      setTimeout(() => {
+        showEndModal(bowlerWon, bowlerWon
+          ? `Target defended! Opponent fell short by ${cricketState.target - cricketState.runs} runs.`
+          : `You were bowled out! Needed ${cricketState.target - cricketState.runs} more runs.`);
+      }, 1000);
+    }
+  } else {
+    // Add runs
+    cricketState.runs += batsmansRun;
+    cricketRuns.textContent = cricketState.runs;
+    AudioFX.tap();
+
+    promptBar.className = 'prompt-bar win';
+    promptTitle.textContent = `+${batsmansRun} RUNS!`;
+    promptSub.textContent = amIBatting ? 'Good shot!' : 'Batsman scored.';
+
+    // Check if 2nd Innings Target achieved
+    if (cricketState.innings === 2) {
+      const needed = cricketState.target - cricketState.runs;
+      if (cricketState.runs >= cricketState.target) {
+        // Chased successfully
+        const chaserWon = amIBatting;
+        setTimeout(() => {
+          showEndModal(chaserWon, chaserWon
+            ? `Target reached! Sensational chase!`
+            : `Opponent chased down target of ${cricketState.target}!`);
+        }, 1000);
+        return;
+      } else {
+        cricketMetaMessage.textContent = amIBatting
+          ? `Need ${needed} runs to win!`
+          : `Defend ${needed} more runs!`;
+      }
+    }
+    setTimeout(resetTurnUI, 1600);
+  }
+}
+
+/* =========================================================
+   UI HELPERS & BUTTONS
+   ========================================================= */
+function disableButtons(status) {
+  document.querySelectorAll('.choice-tile').forEach(b => {
+    b.disabled = status;
+    if (!status) b.classList.remove('active-pick');
+  });
+}
+
+function resetTurnUI() {
+  myCurrentChoice = null;
+  oppCurrentChoice = null;
+  isLocked = false;
+  myActionState.textContent = 'Your Move';
+  oppActionState.textContent = 'Ready';
+
+  promptBar.className = 'prompt-bar';
+  promptTitle.textContent = 'MAKE YOUR MOVE';
+  promptSub.textContent = 'Tap an option below';
+
+  if (gameMode === 'rps') {
+    myDisplay.innerHTML = `<i class="fas fa-hand-back-fist"></i>`;
+    oppDisplay.innerHTML = `<i class="fas fa-hand-back-fist"></i>`;
+  } else {
+    myDisplay.innerHTML = `<i class="fas fa-baseball-bat-ball"></i>`;
+    oppDisplay.innerHTML = `<i class="fas fa-baseball-bat-ball"></i>`;
+  }
+  disableButtons(false);
+}
+
+function showEndModal(isMeWinner, desc) {
+  modalWinnerHeading.textContent = isMeWinner ? 'VICTORY!' : 'DEFEAT!';
+  modalWinnerHeading.style.color = isMeWinner ? 'var(--accent-green)' : 'var(--accent-red)';
+  modalWinnerDesc.textContent = desc;
+  modalBadgeIcon.innerHTML = isMeWinner ? '<i class="fas fa-trophy"></i>' : '<i class="fas fa-skull"></i>';
+  if (isMeWinner) blastConfetti();
+  endModal.classList.add('open');
+}
+
+function resetMatchStates() {
+  rpsScoreMe = 0;
+  rpsScoreOpp = 0;
+  p1Score.textContent = '0';
+  p2Score.textContent = '0';
+
+  cricketState = {
+    innings: 1,
+    battingPlayerId: isHost ? 'me' : 'opp',
+    target: 0,
+    runs: 0,
+    wickets: 0
+  };
+  cricketRuns.textContent = '0';
+  cricketWickets.textContent = '/0';
+  targetScoreDisplay.textContent = '--';
+
+  endModal.classList.remove('open');
+  if (gameMode === 'cricket') syncCricketRoles();
+  resetTurnUI();
+}
+
+// User Move Click
+document.querySelectorAll('.choice-tile').forEach(tile => {
+  tile.addEventListener('click', () => {
+    if (isLocked || !conn) return;
     isLocked = true;
-    myMove = btn.getAttribute('data-choice');
-    btn.classList.add('selected');
-    myStatusTag.textContent = 'Locked!';
-    choiceButtons.forEach(b => b.disabled = true);
-    AudioEngine.click();
+    myCurrentChoice = tile.getAttribute('data-choice');
+    tile.classList.add('active-pick');
+    myActionState.textContent = 'Locked!';
+    disableButtons(true);
+    AudioFX.tap();
 
-    // Send signals over P2P DataChannel
-    connection.send({ type: 'locked' });
-    connection.send({ type: 'move', choice: myMove });
+    conn.send({ type: 'locked' });
+    conn.send({ type: 'move', choice: myCurrentChoice });
 
-    checkRoundCompletion();
+    checkTurnCompletion();
   });
 });
 
-modalPlayAgain.addEventListener('click', () => {
-  if (connection) {
-    connection.send({ type: 'restart' });
-  }
-  resetWholeMatch();
+modalResetBtn.addEventListener('click', () => {
+  if (conn) conn.send({ type: 'reset' });
+  resetMatchStates();
 });
 
-leaveRoomBtn.addEventListener('click', () => {
-  window.location.reload();
-});
+exitBtn.addEventListener('click', () => window.location.reload());
 
-soundToggle.addEventListener('click', () => {
-  soundEnabled = !soundEnabled;
-  soundToggle.innerHTML = soundEnabled 
-    ? '<i class="fas fa-volume-up"></i>' 
-    : '<i class="fas fa-volume-xmark"></i>';
+soundBtn.addEventListener('click', () => {
+  soundOn = !soundOn;
+  soundBtn.innerHTML = soundOn ? '<i class="fas fa-volume-up"></i>' : '<i class="fas fa-volume-xmark"></i>';
 });
