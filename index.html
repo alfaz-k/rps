@@ -128,28 +128,28 @@
     <section class="dock-container" id="dockContainer">
       <!-- RPS Controls -->
       <div class="button-deck rps-deck" id="rpsDeck">
-        <button class="choice-tile" data-choice="rock">
-          <i class="fas fa-hand-back-fist"></i>
+        <button class="choice-tile rps-tile" data-choice="rock">
+          <div class="tile-icon-wrap"><i class="fas fa-hand-back-fist"></i></div>
           <span>Rock</span>
         </button>
-        <button class="choice-tile" data-choice="paper">
-          <i class="fas fa-hand"></i>
+        <button class="choice-tile rps-tile" data-choice="paper">
+          <div class="tile-icon-wrap"><i class="fas fa-hand"></i></div>
           <span>Paper</span>
         </button>
-        <button class="choice-tile" data-choice="scissors">
-          <i class="fas fa-hand-scissors"></i>
+        <button class="choice-tile rps-tile" data-choice="scissors">
+          <div class="tile-icon-wrap"><i class="fas fa-hand-scissors"></i></div>
           <span>Scissors</span>
         </button>
       </div>
 
-      <!-- Hand Cricket (1 to 6 Only) Controls -->
+      <!-- Hand Cricket Controls (Numbers 1-6) -->
       <div class="button-deck cricket-deck" id="cricketDeck" style="display: none;">
-        <button class="choice-tile num-tile" data-choice="1">1</button>
-        <button class="choice-tile num-tile" data-choice="2">2</button>
-        <button class="choice-tile num-tile" data-choice="3">3</button>
-        <button class="choice-tile num-tile" data-choice="4">4</button>
-        <button class="choice-tile num-tile" data-choice="5">5</button>
-        <button class="choice-tile num-tile" data-choice="6">6</button>
+        <button class="choice-tile num-tile" data-choice="1"><span>1</span></button>
+        <button class="choice-tile num-tile" data-choice="2"><span>2</span></button>
+        <button class="choice-tile num-tile" data-choice="3"><span>3</span></button>
+        <button class="choice-tile num-tile" data-choice="4"><span>4</span></button>
+        <button class="choice-tile num-tile" data-choice="5"><span>5</span></button>
+        <button class="choice-tile num-tile" data-choice="6"><span>6</span></button>
       </div>
     </section>
 
@@ -158,13 +158,23 @@
     </footer>
   </div>
 
-  <!-- End Game Notification Modal -->
-  <div class="end-modal" id="endModal">
-    <div class="end-modal-box">
-      <div class="modal-badge-icon" id="modalBadgeIcon"><i class="fas fa-trophy"></i></div>
+  <!-- PERSISTENT INNINGS BREAK / WICKET MODAL (Requires OK) -->
+  <div class="modal-backdrop" id="inningsModal">
+    <div class="modal-card">
+      <div class="modal-icon-badge warning"><i class="fas fa-fire"></i></div>
+      <h2 id="inningsTitle">INNINGS OVER!</h2>
+      <p id="inningsDesc">Wicket down! Target is set to <strong>0</strong> runs.</p>
+      <button class="action-btn primary full-btn" id="inningsOkBtn">OK, Start 2nd Innings</button>
+    </div>
+  </div>
+
+  <!-- PERSISTENT MATCH VICTORY / DEFEAT MODAL (Requires OK) -->
+  <div class="modal-backdrop" id="endModal">
+    <div class="modal-card">
+      <div class="modal-icon-badge" id="modalBadgeIcon"><i class="fas fa-trophy"></i></div>
       <h2 id="modalWinnerHeading">VICTORY!</h2>
-      <p id="modalWinnerDesc">Result summary</p>
-      <button class="action-btn primary" id="modalResetBtn">Play Again</button>
+      <p id="modalWinnerDesc">Result summary goes here.</p>
+      <button class="action-btn primary full-btn" id="modalResetBtn">OK, Play Again</button>
     </div>
   </div>
 
