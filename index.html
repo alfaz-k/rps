@@ -16,9 +16,6 @@
   <div class="ambient-glow"></div>
   <canvas id="particleCanvas"></canvas>
 
-  <!-- FLOATING MINI TOAST ALERT -->
-  <div class="toast-container" id="toastContainer"></div>
-
   <!-- LOBBY OVERLAY -->
   <div class="lobby-overlay" id="lobbyScreen">
     <div class="lobby-box">
@@ -57,7 +54,7 @@
   <div class="game-wrapper">
     <!-- Top Bar -->
     <header class="top-nav">
-      <div class="room-indicator" id="roomBadge">
+      <div class="room-indicator">
         <span class="pulse-dot"></span>
         <span id="roomCodeLabel">ROOM: ---</span>
       </div>
@@ -66,19 +63,6 @@
         <button id="exitBtn" class="icon-button" aria-label="Exit"><i class="fas fa-right-from-bracket"></i></button>
       </div>
     </header>
-
-    <!-- Persistent Toss Call Strip (Visible Only During Toss) -->
-    <div class="toss-call-strip" id="tossCallStrip" style="display: none;">
-      <div class="call-tag host-tag">
-        <span class="call-user" id="tossHostUser">HOST</span>
-        <span class="call-val" id="tossHostVal">ODD</span>
-      </div>
-      <div class="call-vs">VS</div>
-      <div class="call-tag guest-tag">
-        <span class="call-user" id="tossGuestUser">OPPONENT</span>
-        <span class="call-val" id="tossGuestVal">EVEN</span>
-      </div>
-    </div>
 
     <!-- Stat Dashboard -->
     <section class="stat-dashboard" id="statDashboard">
@@ -111,7 +95,7 @@
             <span class="target-num" id="targetScoreDisplay">--</span>
           </div>
         </div>
-        <div class="cricket-meta" id="cricketMetaMessage">Waiting for toss to initiate...</div>
+        <div class="cricket-meta" id="cricketMetaMessage">Waiting for toss configuration...</div>
       </div>
     </section>
 
@@ -188,13 +172,13 @@
           <button type="button" class="mode-btn" id="tossTypeBo3Btn" data-tosstype="bo3">Best of 3</button>
         </div>
 
-        <label class="config-label" style="margin-top: 10px;">HOST CALL</label>
+        <label class="config-label" style="margin-top: 10px;">YOUR CALL</label>
         <div class="mode-toggles toss-call-toggles">
           <button type="button" class="mode-btn active" id="callOddBtn" data-call="odd">ODD</button>
           <button type="button" class="mode-btn" id="callEvenBtn" data-call="even">EVEN</button>
         </div>
 
-        <button class="action-btn primary full-btn" id="startTossBtn" style="margin-top: 14px;">Throw Toss Hand</button>
+        <button class="action-btn primary full-btn" id="startTossBtn" style="margin-top: 14px;">Start Toss</button>
       </div>
 
       <div id="joinerTossWait" style="display: none;">
@@ -206,20 +190,20 @@
   <!-- TOSS DECISION MODAL (WINNER SELECTS BAT OR BOWL) -->
   <div class="modal-backdrop" id="tossDecisionModal">
     <div class="modal-card">
-      <div class="modal-icon-badge"><i class="fas fa-award"></i></div>
+      <div class="modal-icon-badge"><i class="fas fa-trophy"></i></div>
       <h2 id="tossWinnerHeading">TOSS WON!</h2>
       <p id="tossWinnerDesc">Choose your role:</p>
       <div class="btn-cluster" id="tossDecisionBtns">
-        <button class="action-btn primary" id="chooseBatBtn"><i class="fas fa-baseball-bat-ball"></i> Bat First</button>
-        <button class="action-btn secondary" id="chooseBowlBtn"><i class="fas fa-bowling-ball"></i> Bowl First</button>
+        <button class="action-btn primary" id="chooseBatBtn">Bat First</button>
+        <button class="action-btn secondary" id="chooseBowlBtn">Bowl First</button>
       </div>
       <div id="tossDecisionWait" style="display: none;">
-        <p class="waiting-text"><i class="fas fa-spinner fa-spin"></i> Opponent is deciding to Bat or Bowl...</p>
+        <p class="waiting-text"><i class="fas fa-spinner fa-spin"></i> Toss winner is picking Bat or Bowl...</p>
       </div>
     </div>
   </div>
 
-  <!-- PERSISTENT INNINGS BREAK / WICKET MODAL (Requires OK) -->
+  <!-- PERSISTENT INNINGS BREAK / WICKET MODAL -->
   <div class="modal-backdrop" id="inningsModal">
     <div class="modal-card">
       <div class="modal-icon-badge warning"><i class="fas fa-fire"></i></div>
@@ -229,7 +213,7 @@
     </div>
   </div>
 
-  <!-- PERSISTENT MATCH VICTORY / DEFEAT MODAL (Requires OK) -->
+  <!-- PERSISTENT MATCH VICTORY / DEFEAT MODAL -->
   <div class="modal-backdrop" id="endModal">
     <div class="modal-card">
       <div class="modal-icon-badge" id="modalBadgeIcon"><i class="fas fa-trophy"></i></div>
