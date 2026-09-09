@@ -16,6 +16,9 @@
   <div class="ambient-glow"></div>
   <canvas id="particleCanvas"></canvas>
 
+  <!-- FLOATING MINI TOAST ALERT -->
+  <div class="toast-container" id="toastContainer"></div>
+
   <!-- LOBBY OVERLAY -->
   <div class="lobby-overlay" id="lobbyScreen">
     <div class="lobby-box">
@@ -54,7 +57,7 @@
   <div class="game-wrapper">
     <!-- Top Bar -->
     <header class="top-nav">
-      <div class="room-indicator">
+      <div class="room-indicator" id="roomBadge">
         <span class="pulse-dot"></span>
         <span id="roomCodeLabel">ROOM: ---</span>
       </div>
@@ -85,7 +88,7 @@
       <!-- Hand Cricket Dashboard -->
       <div class="cricket-board" id="cricketBoard" style="display: none;">
         <div class="cricket-stats-top">
-          <div class="role-pill" id="myCricketRole">BATSMAN</div>
+          <div class="role-pill" id="myCricketRole">TOSS</div>
           <div class="score-container">
             <span class="cricket-score" id="cricketRuns">0</span>
             <span class="cricket-wickets" id="cricketWickets">/0</span>
@@ -95,7 +98,7 @@
             <span class="target-num" id="targetScoreDisplay">--</span>
           </div>
         </div>
-        <div class="cricket-meta" id="cricketMetaMessage">Toss pending...</div>
+        <div class="cricket-meta" id="cricketMetaMessage">Waiting for toss to initiate...</div>
       </div>
     </section>
 
@@ -163,7 +166,7 @@
     <div class="modal-card">
       <div class="modal-icon-badge"><i class="fas fa-coins"></i></div>
       <h2>CRICKET TOSS</h2>
-      <p id="tossSetupDesc">Configure the toss round:</p>
+      <p id="tossSetupDesc">Prepare for the opening toss:</p>
 
       <div class="toss-config-section" id="hostTossControls">
         <label class="config-label">TOSS FORMAT</label>
@@ -172,17 +175,17 @@
           <button type="button" class="mode-btn" id="tossTypeBo3Btn" data-tosstype="bo3">Best of 3</button>
         </div>
 
-        <label class="config-label" style="margin-top: 10px;">YOUR CALL</label>
+        <label class="config-label" style="margin-top: 10px;">HOST CALL</label>
         <div class="mode-toggles toss-call-toggles">
           <button type="button" class="mode-btn active" id="callOddBtn" data-call="odd">ODD</button>
           <button type="button" class="mode-btn" id="callEvenBtn" data-call="even">EVEN</button>
         </div>
 
-        <button class="action-btn primary full-btn" id="startTossBtn" style="margin-top: 14px;">Start Toss</button>
+        <button class="action-btn primary full-btn" id="startTossBtn" style="margin-top: 14px;">Throw Toss Hand</button>
       </div>
 
       <div id="joinerTossWait" style="display: none;">
-        <p class="waiting-text">Host is setting up toss format and call...</p>
+        <p class="waiting-text"><i class="fas fa-spinner fa-spin"></i> Waiting for host to configure toss...</p>
       </div>
     </div>
   </div>
@@ -190,15 +193,15 @@
   <!-- TOSS DECISION MODAL (WINNER SELECTS BAT OR BOWL) -->
   <div class="modal-backdrop" id="tossDecisionModal">
     <div class="modal-card">
-      <div class="modal-icon-badge"><i class="fas fa-trophy"></i></div>
+      <div class="modal-icon-badge"><i class="fas fa-award"></i></div>
       <h2 id="tossWinnerHeading">TOSS WON!</h2>
       <p id="tossWinnerDesc">Choose your role:</p>
       <div class="btn-cluster" id="tossDecisionBtns">
-        <button class="action-btn primary" id="chooseBatBtn">Bat First</button>
-        <button class="action-btn secondary" id="chooseBowlBtn">Bowl First</button>
+        <button class="action-btn primary" id="chooseBatBtn"><i class="fas fa-baseball-bat-ball"></i> Bat First</button>
+        <button class="action-btn secondary" id="chooseBowlBtn"><i class="fas fa-bowling-ball"></i> Bowl First</button>
       </div>
       <div id="tossDecisionWait" style="display: none;">
-        <p class="waiting-text">Toss winner is picking Bat or Bowl...</p>
+        <p class="waiting-text"><i class="fas fa-spinner fa-spin"></i> Opponent is deciding to Bat or Bowl...</p>
       </div>
     </div>
   </div>
