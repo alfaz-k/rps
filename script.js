@@ -246,11 +246,22 @@ function applyGameModeUI() {
 }
 
 roomCodeInput.addEventListener('input', () => {
+  roomCodeInput.classList.remove('input-error');
+  if (lobbyError.textContent.includes('room code')) {
+    lobbyError.textContent = '';
+  }
   const val = roomCodeInput.value.trim().toUpperCase();
   if (val.startsWith('CRIC-')) {
     setGameMode('cricket');
   } else if (val.startsWith('RPS-')) {
     setGameMode('rps');
+  }
+});
+
+playerNameInput.addEventListener('input', () => {
+  playerNameInput.classList.remove('input-error');
+  if (lobbyError.textContent.includes('name')) {
+    lobbyError.textContent = '';
   }
 });
 
@@ -270,10 +281,24 @@ function validateName() {
   return entered;
 }
 
+function validateRoomCode() {
+  const code = roomCodeInput.value.trim().toUpperCase();
+  if (!code) {
+    roomCodeInput.classList.add('input-error');
+    lobbyError.textContent = 'Please enter room code to join!';
+    roomCodeInput.focus();
+    return null;
+  }
+  roomCodeInput.classList.remove('input-error');
+  lobbyError.textContent = '';
+  return code;
+}
+
 createBtn.addEventListener('click', () => {
   const validName = validateName();
   if (!validName) return;
 
+  roomCodeInput.classList.remove('input-error');
   isHost = true;
   myName = validName;
   p1NameLabel.textContent = myName.toUpperCase();
@@ -308,15 +333,12 @@ joinBtn.addEventListener('click', () => {
   const validName = validateName();
   if (!validName) return;
 
-  const rawCode = roomCodeInput.value.trim().toUpperCase();
-  if (!rawCode) {
-    lobbyError.textContent = 'Please enter room code!';
-    return;
-  }
+  const validCode = validateRoomCode();
+  if (!validCode) return;
 
-  if (rawCode.startsWith('CRIC-')) {
+  if (validCode.startsWith('CRIC-')) {
     setGameMode('cricket');
-  } else if (rawCode.startsWith('RPS-')) {
+  } else if (validCode.startsWith('RPS-')) {
     setGameMode('rps');
   }
 
@@ -328,20 +350,22 @@ joinBtn.addEventListener('click', () => {
   peer = new Peer();
 
   peer.on('open', () => {
-    conn = peer.connect(`duel-${rawCode}`);
+    conn = peer.connect(`duel-${validCode}`);
     conn.on('open', () => {
-      roomCodeLabel.textContent = `ROOM: ${rawCode}`;
+      roomCodeLabel.textContent = `ROOM: ${validCode}`;
       applyGameModeUI();
       lobbyScreen.classList.add('hidden');
       setupConnEvents();
       conn.send({ type: 'handshake', name: myName });
     });
     conn.on('error', () => {
+      roomCodeInput.classList.add('input-error');
       lobbyError.textContent = 'Room not found! Check code.';
     });
   });
 
   peer.on('error', () => {
+    roomCodeInput.classList.add('input-error');
     lobbyError.textContent = 'Unable to connect to room.';
   });
 });
@@ -377,7 +401,6 @@ function setupConnEvents() {
       }
       highlightTurn();
     } else if (data.type === 'toss_modal_sync') {
-      // Synchronize joiner to show wait screen
       openTossSetupModal();
     } else if (data.type === 'toss_start') {
       tossState.active = true;
@@ -415,7 +438,6 @@ function setupConnEvents() {
    TOSS SYSTEM (HAND CRICKET ODD/EVEN VIA 1-6)
    ========================================================= */
 function openTossSetupModal() {
-  // Prevent move inputs while toss setup is active
   disableButtons(true);
 
   if (gameMode === 'cricket') {
@@ -808,7 +830,6 @@ function resetTurnUI() {
     oppDisplay.innerHTML = `<i class="fas fa-baseball-bat-ball"></i>`;
   }
 
-  // Only enable input buttons if actually in an active round (not during toss setup)
   if (gameMode === 'rps' || tossState.active || cricketState.inPlay) {
     disableButtons(false);
   } else {
