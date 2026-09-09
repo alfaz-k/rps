@@ -15,7 +15,7 @@ let soundOn = true;
 let rpsScoreMe = 0;
 let rpsScoreOpp = 0;
 
-// Hand Cricket State
+// Hand Cricket Match State
 let cricketState = {
   innings: 1,           // 1: Setting target, 2: Chasing target
   battingPlayerId: null,// 'me' or 'opp'
@@ -24,7 +24,7 @@ let cricketState = {
   wickets: 0
 };
 
-// Toss State (Odd/Even Hand Cricket Style)
+// Hand Cricket Toss State (Odd/Even via 1-6)
 let tossState = {
   active: false,
   format: 'single',     // 'single' (Default) or 'bo3'
@@ -39,6 +39,7 @@ let myCurrentChoice = null;
 let oppCurrentChoice = null;
 
 // Element References
+const toastContainer = document.getElementById('toastContainer');
 const lobbyScreen = document.getElementById('lobbyScreen');
 const modeButtons = document.querySelectorAll('.mode-btn');
 const playerNameInput = document.getElementById('playerNameInput');
@@ -47,6 +48,7 @@ const createBtn = document.getElementById('createBtn');
 const joinBtn = document.getElementById('joinBtn');
 const lobbyError = document.getElementById('lobbyError');
 
+const roomBadge = document.getElementById('roomBadge');
 const roomCodeLabel = document.getElementById('roomCodeLabel');
 const roundStatusText = document.getElementById('roundStatusText');
 const p1Card = document.getElementById('p1Card');
@@ -112,6 +114,33 @@ const modalResetBtn = document.getElementById('modalResetBtn');
 const yearEl = document.getElementById('yearEl');
 
 yearEl.textContent = new Date().getFullYear();
+
+/* =========================================================
+   FLOATING MINI TOAST ALERT SYSTEM (Auto-dismiss in 3s)
+   ========================================================= */
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast-item ${type}`;
+
+  let iconClass = 'fa-circle-info';
+  if (type === 'success') iconClass = 'fa-circle-check';
+  if (type === 'warning') iconClass = 'fa-triangle-exclamation';
+  if (type === 'danger') iconClass = 'fa-circle-xmark';
+
+  toast.innerHTML = `
+    <i class="fas ${iconClass} toast-icon"></i>
+    <span class="toast-msg">${message}</span>
+  `;
+
+  toastContainer.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add('fade-out');
+    setTimeout(() => {
+      toast.remove();
+    }, 250);
+  }, 2800);
+}
 
 /* =========================================================
    SYNTHESIZED AUDIO
@@ -291,6 +320,7 @@ createBtn.addEventListener('click', () => {
     applyGameModeUI();
     highlightTurn();
     disableButtons(true);
+    showToast(`Room ${roomKey} created! Share code with friend.`, 'success');
   });
 
   peer.on('connection', c => {
@@ -300,6 +330,7 @@ createBtn.addEventListener('click', () => {
 
   peer.on('error', () => {
     lobbyError.textContent = 'Room error. Tap create again.';
+    showToast('Room creation failed. Please try again.', 'danger');
   });
 });
 
@@ -334,14 +365,17 @@ joinBtn.addEventListener('click', () => {
       lobbyScreen.classList.add('hidden');
       setupConnEvents();
       conn.send({ type: 'handshake', name: myName });
+      showToast(`Connected to room ${rawCode}!`, 'success');
     });
     conn.on('error', () => {
       lobbyError.textContent = 'Room not found! Check code.';
+      showToast('Could not find room. Check code.', 'danger');
     });
   });
 
   peer.on('error', () => {
     lobbyError.textContent = 'Unable to connect to room.';
+    showToast('Connection failed.', 'danger');
   });
 });
 
@@ -349,6 +383,7 @@ function setupConnEvents() {
   roundStatusText.textContent = 'Opponent connected!';
   oppActionState.textContent = 'Ready';
   disableButtons(false);
+  showToast(`${oppName} connected!`, 'success');
 
   if (isHost) {
     conn.send({ type: 'init_sync', mode: gameMode, hostName: myName });
@@ -363,6 +398,7 @@ function setupConnEvents() {
     if (data.type === 'handshake') {
       oppName = data.name || 'Opponent';
       p2NameLabel.textContent = oppName.toUpperCase();
+      showToast(`${oppName} joined the match!`, 'info');
     } else if (data.type === 'init_sync') {
       gameMode = data.mode;
       oppName = data.hostName || 'Host';
@@ -380,6 +416,7 @@ function setupConnEvents() {
       tossState.joinerWins = 0;
       tossState.round = 1;
       tossSetupModal.classList.remove('open');
+      showToast(`Toss started! Host called ${data.hostCall.toUpperCase()}`, 'warning');
       promptTossMove();
     } else if (data.type === 'toss_decision_open') {
       handleTossDecisionOpen(data.winnerIsHost);
@@ -387,6 +424,7 @@ function setupConnEvents() {
       applyTossDecision(data.hostRole);
     } else if (data.type === 'locked') {
       oppActionState.textContent = 'Locked!';
+      showToast(`${oppName} locked their move!`, 'info');
     } else if (data.type === 'move') {
       oppCurrentChoice = data.choice;
       checkTurnCompletion();
@@ -401,6 +439,7 @@ function setupConnEvents() {
     roundStatusText.textContent = 'Opponent left.';
     oppActionState.textContent = 'Disconnected';
     disableButtons(true);
+    showToast('Opponent disconnected from arena.', 'danger');
   });
 }
 
@@ -418,31 +457,35 @@ function openTossSetupModal() {
   }
 }
 
-// Toss Format Selection
+// Format selection buttons
 tossTypeDefaultBtn.addEventListener('click', () => {
   tossTypeDefaultBtn.classList.add('active');
   tossTypeBo3Btn.classList.remove('active');
   tossState.format = 'single';
+  showToast('Toss format: 1-Round Default', 'info');
 });
 tossTypeBo3Btn.addEventListener('click', () => {
   tossTypeBo3Btn.classList.add('active');
   tossTypeDefaultBtn.classList.remove('active');
   tossState.format = 'bo3';
+  showToast('Toss format: Best of 3', 'info');
 });
 
-// Toss Call Selection
+// Call selection buttons
 callOddBtn.addEventListener('click', () => {
   callOddBtn.classList.add('active');
   callEvenBtn.classList.remove('active');
   tossState.hostCall = 'odd';
+  showToast('Host call: ODD', 'info');
 });
 callEvenBtn.addEventListener('click', () => {
   callEvenBtn.classList.add('active');
   callOddBtn.classList.remove('active');
   tossState.hostCall = 'even';
+  showToast('Host call: EVEN', 'info');
 });
 
-// Host initiates Toss
+// Host triggers Toss Duel
 startTossBtn.addEventListener('click', () => {
   tossState.active = true;
   tossState.hostWins = 0;
@@ -456,18 +499,19 @@ startTossBtn.addEventListener('click', () => {
   });
 
   tossSetupModal.classList.remove('open');
+  showToast(`Toss live! Pick your hand number (1-6).`, 'warning');
   promptTossMove();
 });
 
 function promptTossMove() {
   promptBar.className = 'prompt-bar';
-  const formatText = tossState.format === 'bo3' ? `(Best of 3 - Round ${tossState.round})` : '(Default)';
+  const formatText = tossState.format === 'bo3' ? `(Best of 3 - Duel ${tossState.round})` : '(Default)';
   promptTitle.textContent = `TOSS: PICK 1-6 ${formatText}`;
   const hostCallText = tossState.hostCall.toUpperCase();
   const guestCallText = tossState.hostCall === 'odd' ? 'EVEN' : 'ODD';
-  promptSub.textContent = isHost ? `Your Call: ${hostCallText}` : `Opponent Call: ${hostCallText} | Your Call: ${guestCallText}`;
+  promptSub.textContent = isHost ? `Your Call: ${hostCallText}` : `Host Call: ${hostCallText} | Your Call: ${guestCallText}`;
   myCricketRole.textContent = 'TOSS';
-  cricketMetaMessage.textContent = `Toss in progress. Sum determines Odd/Even!`;
+  cricketMetaMessage.textContent = `Throw hand 1-6. Sum determines Odd/Even!`;
   resetTurnUI();
 }
 
@@ -481,7 +525,7 @@ function evaluateTossDuel() {
   myDisplay.innerHTML = `<span style="font-family:var(--font-title);font-size:2rem;font-weight:900">${p1}</span>`;
   oppDisplay.innerHTML = `<span style="font-family:var(--font-title);font-size:2rem;font-weight:900">${p2}</span>`;
 
-  // Determine who won this toss duel
+  // Check winner of this toss round
   const hostWonThis = outcomeString === tossState.hostCall;
   if (hostWonThis) {
     tossState.hostWins++;
@@ -493,16 +537,18 @@ function evaluateTossDuel() {
   promptBar.className = 'prompt-bar win';
   promptTitle.textContent = `SUM = ${sum} (${outcomeString.toUpperCase()})`;
   const roundWinnerName = hostWonThis ? (isHost ? 'You' : oppName) : (isHost ? oppName : 'You');
-  promptSub.textContent = `${roundWinnerName} won this toss duel!`;
+  promptSub.textContent = `${roundWinnerName} won this toss round!`;
+  showToast(`Toss sum is ${sum} (${outcomeString.toUpperCase()})!`, 'info');
 
   if (tossState.format === 'single') {
     concludeToss(hostWonThis);
   } else {
-    // Best of 3 Toss
+    // Best of 3
     if (tossState.hostWins >= 2 || tossState.joinerWins >= 2) {
       concludeToss(tossState.hostWins >= 2);
     } else {
       tossState.round++;
+      showToast(`Next toss round loading...`, 'info');
       setTimeout(promptTossMove, 1800);
     }
   }
@@ -524,14 +570,16 @@ function handleTossDecisionOpen(winnerIsHost) {
 
   if (iAmWinner) {
     tossWinnerHeading.textContent = 'YOU WON THE TOSS!';
-    tossWinnerDesc.textContent = 'Decide whether you want to Bat or Bowl first:';
+    tossWinnerDesc.textContent = 'Choose whether to Bat or Bowl first:';
     tossDecisionBtns.style.display = 'grid';
     tossDecisionWait.style.display = 'none';
+    showToast('You won the toss! Pick Bat or Bowl.', 'success');
   } else {
     tossWinnerHeading.textContent = `${oppName.toUpperCase()} WON THE TOSS!`;
-    tossWinnerDesc.textContent = 'Waiting for their decision...';
+    tossWinnerDesc.textContent = 'Waiting for their choice to Bat or Bowl...';
     tossDecisionBtns.style.display = 'none';
     tossDecisionWait.style.display = 'block';
+    showToast(`${oppName} won the toss. Awaiting decision...`, 'warning');
   }
 }
 
@@ -539,12 +587,14 @@ chooseBatBtn.addEventListener('click', () => {
   const hostRole = isHost ? 'bat' : 'bowl';
   conn.send({ type: 'toss_role_decided', hostRole });
   applyTossDecision(hostRole);
+  showToast('You elected to BAT first!', 'success');
 });
 
 chooseBowlBtn.addEventListener('click', () => {
   const hostRole = isHost ? 'bowl' : 'bat';
   conn.send({ type: 'toss_role_decided', hostRole });
   applyTossDecision(hostRole);
+  showToast('You elected to BOWL first!', 'success');
 });
 
 function applyTossDecision(hostRole) {
@@ -619,6 +669,7 @@ function evaluateRPS() {
     promptBar.className = 'prompt-bar';
     promptTitle.textContent = 'STANDOFF!';
     promptSub.textContent = 'Both chose identical hands.';
+    showToast('Standoff! Identical hands.', 'warning');
   } else if (beats[myCurrentChoice] === oppCurrentChoice) {
     rpsScoreMe++;
     promptBar.className = 'prompt-bar win';
@@ -626,11 +677,13 @@ function evaluateRPS() {
     promptSub.textContent = `${myCurrentChoice.toUpperCase()} beats ${oppCurrentChoice.toUpperCase()}`;
     AudioFX.win();
     blastConfetti();
+    showToast(`You won the round!`, 'success');
   } else {
     rpsScoreOpp++;
     promptBar.className = 'prompt-bar lose';
     promptTitle.textContent = 'ROUND LOST!';
     promptSub.textContent = `${oppCurrentChoice.toUpperCase()} counters ${myCurrentChoice.toUpperCase()}`;
+    showToast(`${oppName} won the round!`, 'danger');
   }
 
   p1Score.textContent = rpsScoreMe;
@@ -686,6 +739,7 @@ function evaluateCricket() {
     promptTitle.textContent = 'WICKET! OUT!';
     promptSub.textContent = `Both threw ${myPick}!`;
     cricketWickets.textContent = '/1';
+    showToast(`WICKET! Both threw ${myPick}!`, 'danger');
 
     if (cricketState.innings === 1) {
       const targetScore = cricketState.runs + 1;
@@ -703,7 +757,6 @@ function evaluateCricket() {
       }, 1000);
     }
   } else {
-    // Runs scored
     cricketState.runs += batsmansRun;
     cricketRuns.textContent = cricketState.runs;
     AudioFX.tap();
@@ -711,6 +764,7 @@ function evaluateCricket() {
     promptBar.className = 'prompt-bar win';
     promptTitle.textContent = `+${batsmansRun} RUNS!`;
     promptSub.textContent = amIBatting ? 'Great shot!' : 'Batsman scored.';
+    showToast(`+${batsmansRun} runs scored!`, 'info');
 
     if (cricketState.innings === 2) {
       const needed = cricketState.target - cricketState.runs;
@@ -745,6 +799,7 @@ function startSecondInnings() {
   cricketWickets.textContent = '/0';
   syncCricketRoles();
   resetTurnUI();
+  showToast('2nd Innings begins! Chase is on.', 'warning');
 }
 
 /* =========================================================
@@ -790,12 +845,17 @@ function showEndModal(isMeWinner, desc) {
   endModal.classList.add('open');
 }
 
+/* =========================================================
+   COMPLETE CLEAN STATE RESET (Eliminates Replay Glitches)
+   ========================================================= */
 function resetMatchStates() {
+  // Wipe RPS series
   rpsScoreMe = 0;
   rpsScoreOpp = 0;
   p1Score.textContent = '0';
   p2Score.textContent = '0';
 
+  // Wipe Hand Cricket completely
   cricketState = {
     innings: 1,
     battingPlayerId: null,
@@ -806,10 +866,26 @@ function resetMatchStates() {
   cricketRuns.textContent = '0';
   cricketWickets.textContent = '/0';
   targetScoreDisplay.textContent = '--';
+  myCricketRole.textContent = 'TOSS';
+  cricketMetaMessage.textContent = 'Waiting for toss to initiate...';
 
+  // Wipe Toss
+  tossState = {
+    active: false,
+    format: 'single',
+    hostCall: 'odd',
+    hostWins: 0,
+    joinerWins: 0,
+    round: 1,
+    winnerId: null
+  };
+
+  // Close any active modals
   endModal.classList.remove('open');
   inningsModal.classList.remove('open');
   tossDecisionModal.classList.remove('open');
+
+  showToast('Match restarted! Fresh series initialized.', 'info');
 
   if (gameMode === 'cricket') {
     openTossSetupModal();
@@ -835,6 +911,7 @@ document.querySelectorAll('.choice-tile').forEach(tile => {
     conn.send({ type: 'locked' });
     conn.send({ type: 'move', choice: myCurrentChoice });
 
+    showToast(`You selected ${myCurrentChoice}`, 'info');
     checkTurnCompletion();
   });
 });
@@ -853,9 +930,20 @@ modalResetBtn.addEventListener('click', () => {
   resetMatchStates();
 });
 
+// Click room badge to copy code
+roomBadge.addEventListener('click', () => {
+  const code = roomCodeLabel.textContent.replace('ROOM: ', '').trim();
+  if (code && code !== '---') {
+    navigator.clipboard.writeText(code).then(() => {
+      showToast(`Copied room code "${code}" to clipboard!`, 'success');
+    });
+  }
+});
+
 exitBtn.addEventListener('click', () => window.location.reload());
 
 soundBtn.addEventListener('click', () => {
   soundOn = !soundOn;
   soundBtn.innerHTML = soundOn ? '<i class="fas fa-volume-up"></i>' : '<i class="fas fa-volume-xmark"></i>';
+  showToast(soundOn ? 'Sound enabled' : 'Sound muted', 'info');
 });
