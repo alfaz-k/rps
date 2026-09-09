@@ -33,13 +33,13 @@
       </div>
 
       <div class="field-group">
-        <label>YOUR NAME</label>
-        <input type="text" id="playerNameInput" placeholder="Player" maxlength="10" />
+        <label>YOUR NAME <span class="required-star">*</span></label>
+        <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="12" required />
       </div>
 
       <div class="field-group">
         <label>ROOM CODE (TO JOIN)</label>
-        <input type="text" id="roomCodeInput" placeholder="4-DIGIT CODE" maxlength="6" />
+        <input type="text" id="roomCodeInput" placeholder="e.g. CRIC-A1B2 or RPS-C3D4" maxlength="12" />
       </div>
 
       <div class="btn-cluster">
@@ -52,7 +52,7 @@
 
   <!-- MAIN VIEWPORT -->
   <div class="game-wrapper">
-    <!-- Clean Top Bar -->
+    <!-- Top Bar -->
     <header class="top-nav">
       <div class="room-indicator">
         <span class="pulse-dot"></span>
@@ -64,11 +64,11 @@
       </div>
     </header>
 
-    <!-- Dashboard: Switches according to game mode -->
+    <!-- Stat Dashboard -->
     <section class="stat-dashboard" id="statDashboard">
-      <!-- Standard RPS Header Dashboard -->
+      <!-- RPS Header Dashboard -->
       <div class="rps-scores" id="rpsBoard">
-        <div class="side-score">
+        <div class="side-score" id="p1Card">
           <span class="player-name" id="p1NameLabel">YOU</span>
           <span class="score-digit" id="p1Score">0</span>
         </div>
@@ -76,13 +76,13 @@
           <span class="game-badge" id="gameTypeBadge">RPS</span>
           <span class="round-status" id="roundStatusText">Waiting for connection...</span>
         </div>
-        <div class="side-score">
+        <div class="side-score" id="p2Card">
           <span class="player-name" id="p2NameLabel">OPPONENT</span>
           <span class="score-digit" id="p2Score">0</span>
         </div>
       </div>
 
-      <!-- Hand Cricket Calculator Dashboard -->
+      <!-- Hand Cricket Dashboard -->
       <div class="cricket-board" id="cricketBoard" style="display: none;">
         <div class="cricket-stats-top">
           <div class="role-pill" id="myCricketRole">BATSMAN</div>
@@ -118,13 +118,13 @@
       </div>
     </main>
 
-    <!-- Live Status Pill -->
+    <!-- Prompt / Status Bar -->
     <div class="prompt-bar" id="promptBar">
       <h3 id="promptTitle">MAKE YOUR MOVE</h3>
       <p id="promptSub">Tap an option below</p>
     </div>
 
-    <!-- Dynamic Actions Dock (RPS or 1-6 Cricket Buttons) -->
+    <!-- Controls Dock -->
     <section class="dock-container" id="dockContainer">
       <!-- RPS Controls -->
       <div class="button-deck rps-deck" id="rpsDeck">
@@ -163,7 +163,7 @@
     <div class="end-modal-box">
       <div class="modal-badge-icon" id="modalBadgeIcon"><i class="fas fa-trophy"></i></div>
       <h2 id="modalWinnerHeading">VICTORY!</h2>
-      <p id="modalWinnerDesc">Winner statement goes here.</p>
+      <p id="modalWinnerDesc">Result summary</p>
       <button class="action-btn primary" id="modalResetBtn">Play Again</button>
     </div>
   </div>
