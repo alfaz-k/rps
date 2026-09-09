@@ -1,937 +1,718 @@
-/* =========================================================
-   CLEAN PEER-TO-PEER RPS & HAND CRICKET CONTROLLER
-   ========================================================= */
-
-let peer = null;
-let conn = null;
-let myName = '';
-let oppName = 'Opponent';
-let gameMode = 'rps'; // 'rps' or 'cricket'
-let isHost = false;
-let isLocked = false;
-let soundOn = true;
-
-// RPS Series State
-let rpsScoreMe = 0;
-let rpsScoreOpp = 0;
-
-// Hand Cricket State
-let cricketState = {
-  innings: 1,           // 1: Setting target, 2: Chasing target
-  battingPlayerId: null,// 'me' or 'opp'
-  target: 0,
-  runs: 0,
-  wickets: 0,
-  inPlay: false         // true only after toss role is selected
-};
-
-// Toss State (Odd/Even Hand Cricket Style)
-let tossState = {
-  active: false,
-  format: 'single',     // 'single' (Default) or 'bo3'
-  hostCall: 'odd',      // 'odd' or 'even'
-  hostWins: 0,
-  joinerWins: 0,
-  round: 1,
-  winnerId: null        // 'me' or 'opp'
-};
-
-let myCurrentChoice = null;
-let oppCurrentChoice = null;
-
-// Element References
-const lobbyScreen = document.getElementById('lobbyScreen');
-const modeButtons = document.querySelectorAll('.mode-btn');
-const playerNameInput = document.getElementById('playerNameInput');
-const roomCodeInput = document.getElementById('roomCodeInput');
-const createBtn = document.getElementById('createBtn');
-const joinBtn = document.getElementById('joinBtn');
-const lobbyError = document.getElementById('lobbyError');
-
-const roomCodeLabel = document.getElementById('roomCodeLabel');
-const roundStatusText = document.getElementById('roundStatusText');
-const p1Card = document.getElementById('p1Card');
-const p2Card = document.getElementById('p2Card');
-const p1NameLabel = document.getElementById('p1NameLabel');
-const p2NameLabel = document.getElementById('p2NameLabel');
-const p1Score = document.getElementById('p1Score');
-const p2Score = document.getElementById('p2Score');
-
-const rpsBoard = document.getElementById('rpsBoard');
-const cricketBoard = document.getElementById('cricketBoard');
-const rpsDeck = document.getElementById('rpsDeck');
-const cricketDeck = document.getElementById('cricketDeck');
-const gameTypeBadge = document.getElementById('gameTypeBadge');
-
-const myCricketRole = document.getElementById('myCricketRole');
-const cricketRuns = document.getElementById('cricketRuns');
-const cricketWickets = document.getElementById('cricketWickets');
-const targetScoreDisplay = document.getElementById('targetScoreDisplay');
-const cricketMetaMessage = document.getElementById('cricketMetaMessage');
-
-const myDisplay = document.getElementById('myDisplay');
-const oppDisplay = document.getElementById('oppDisplay');
-const myActionState = document.getElementById('myActionState');
-const oppActionState = document.getElementById('oppActionState');
-
-const promptBar = document.getElementById('promptBar');
-const promptTitle = document.getElementById('promptTitle');
-const promptSub = document.getElementById('promptSub');
-
-const soundBtn = document.getElementById('soundBtn');
-const exitBtn = document.getElementById('exitBtn');
-
-// Toss Modals & Controls
-const tossSetupModal = document.getElementById('tossSetupModal');
-const hostTossControls = document.getElementById('hostTossControls');
-const joinerTossWait = document.getElementById('joinerTossWait');
-const tossTypeDefaultBtn = document.getElementById('tossTypeDefaultBtn');
-const tossTypeBo3Btn = document.getElementById('tossTypeBo3Btn');
-const callOddBtn = document.getElementById('callOddBtn');
-const callEvenBtn = document.getElementById('callEvenBtn');
-const startTossBtn = document.getElementById('startTossBtn');
-
-const tossDecisionModal = document.getElementById('tossDecisionModal');
-const tossWinnerHeading = document.getElementById('tossWinnerHeading');
-const tossWinnerDesc = document.getElementById('tossWinnerDesc');
-const tossDecisionBtns = document.getElementById('tossDecisionBtns');
-const tossDecisionWait = document.getElementById('tossDecisionWait');
-const chooseBatBtn = document.getElementById('chooseBatBtn');
-const chooseBowlBtn = document.getElementById('chooseBowlBtn');
-
-// Match & Innings Modals
-const inningsModal = document.getElementById('inningsModal');
-const inningsTitle = document.getElementById('inningsTitle');
-const inningsDesc = document.getElementById('inningsDesc');
-const inningsOkBtn = document.getElementById('inningsOkBtn');
-
-const endModal = document.getElementById('endModal');
-const modalBadgeIcon = document.getElementById('modalBadgeIcon');
-const modalWinnerHeading = document.getElementById('modalWinnerHeading');
-const modalWinnerDesc = document.getElementById('modalWinnerDesc');
-const modalResetBtn = document.getElementById('modalResetBtn');
-const yearEl = document.getElementById('yearEl');
-
-yearEl.textContent = new Date().getFullYear();
-
-/* =========================================================
-   SYNTHESIZED AUDIO
-   ========================================================= */
-const AudioFX = {
-  ctx: null,
-  init() {
-    if (!this.ctx) {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      this.ctx = new AC();
-    }
-  },
-  play(freq, type = 'sine', dur = 0.1) {
-    if (!soundOn) return;
-    try {
-      this.init();
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-      gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + dur);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start();
-      osc.stop(this.ctx.currentTime + dur);
-    } catch (e) {}
-  },
-  tap() { this.play(400, 'sine', 0.05); },
-  win() {
-    setTimeout(() => this.play(523, 'sine', 0.12), 0);
-    setTimeout(() => this.play(659, 'sine', 0.12), 100);
-    setTimeout(() => this.play(783, 'sine', 0.2), 200);
-  },
-  out() {
-    setTimeout(() => this.play(260, 'sawtooth', 0.2), 0);
-    setTimeout(() => this.play(180, 'sawtooth', 0.3), 150);
-  }
-};
-
-/* =========================================================
-   CANVAS PARTICLES
-   ========================================================= */
-const canvas = document.getElementById('particleCanvas');
-const ctx = canvas.getContext('2d');
-let particles = [];
-
-function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
-
-function blastConfetti() {
-  particles = [];
-  const palette = ['#00f0ff', '#ff2a85', '#ffd60a', '#05ffa1'];
-  for (let i = 0; i < 50; i++) {
-    particles.push({
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-      vx: (Math.random() - 0.5) * 12,
-      vy: (Math.random() - 0.7) * 14,
-      size: Math.random() * 5 + 3,
-      color: palette[Math.floor(Math.random() * palette.length)],
-      alpha: 1,
-      decay: Math.random() * 0.02 + 0.02
-    });
-  }
+:root {
+  --bg-deep: #070913;
+  --panel: rgba(18, 23, 42, 0.85);
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --accent-cyan: #00f0ff;
+  --accent-pink: #ff2a85;
+  --accent-gold: #ffd60a;
+  --accent-green: #05ffa1;
+  --accent-red: #ff3366;
+  --text-pure: #ffffff;
+  --text-muted: #94a3b8;
+  --font-title: 'Orbitron', monospace;
+  --font-text: 'Outfit', sans-serif;
+  --radius-xl: 20px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+  --trans: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-function renderParticles() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  particles.forEach((p, idx) => {
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vy += 0.3;
-    p.alpha -= p.decay;
-    if (p.alpha <= 0) {
-      particles.splice(idx, 1);
-    } else {
-      ctx.save();
-      ctx.globalAlpha = p.alpha;
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
-  });
-  requestAnimationFrame(renderParticles);
-}
-renderParticles();
-
-/* =========================================================
-   LOBBY / MODE SWITCHING
-   ========================================================= */
-modeButtons.forEach(btn => {
-  btn.addEventListener('click', () => {
-    modeButtons.forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    gameMode = btn.getAttribute('data-game');
-  });
-});
-
-function setGameMode(targetMode) {
-  gameMode = targetMode;
-  modeButtons.forEach(b => {
-    b.classList.toggle('active', b.getAttribute('data-game') === targetMode);
-  });
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-function applyGameModeUI() {
-  if (gameMode === 'cricket') {
-    rpsBoard.style.display = 'none';
-    rpsDeck.style.display = 'none';
-    cricketBoard.style.display = 'flex';
-    cricketDeck.style.display = 'grid';
-    gameTypeBadge.textContent = 'CRICKET';
-    myDisplay.innerHTML = `<i class="fas fa-baseball-bat-ball"></i>`;
-    oppDisplay.innerHTML = `<i class="fas fa-baseball-bat-ball"></i>`;
-  } else {
-    rpsBoard.style.display = 'grid';
-    rpsDeck.style.display = 'grid';
-    cricketBoard.style.display = 'none';
-    cricketDeck.style.display = 'none';
-    gameTypeBadge.textContent = 'RPS';
-    myDisplay.innerHTML = `<i class="fas fa-hand-back-fist"></i>`;
-    oppDisplay.innerHTML = `<i class="fas fa-hand-back-fist"></i>`;
-  }
+body {
+  background: var(--bg-deep);
+  color: var(--text-pure);
+  font-family: var(--font-text);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  position: relative;
 }
 
-roomCodeInput.addEventListener('input', () => {
-  roomCodeInput.classList.remove('input-error');
-  if (lobbyError.textContent.includes('room code')) {
-    lobbyError.textContent = '';
-  }
-  const val = roomCodeInput.value.trim().toUpperCase();
-  if (val.startsWith('CRIC-')) {
-    setGameMode('cricket');
-  } else if (val.startsWith('RPS-')) {
-    setGameMode('rps');
-  }
-});
-
-playerNameInput.addEventListener('input', () => {
-  playerNameInput.classList.remove('input-error');
-  if (lobbyError.textContent.includes('name')) {
-    lobbyError.textContent = '';
-  }
-});
-
-/* =========================================================
-   P2P PEER CONNECTIONS & VALIDATION
-   ========================================================= */
-function validateName() {
-  const entered = playerNameInput.value.trim();
-  if (!entered) {
-    playerNameInput.classList.add('input-error');
-    lobbyError.textContent = 'Please enter your name to proceed!';
-    playerNameInput.focus();
-    return null;
-  }
-  playerNameInput.classList.remove('input-error');
-  lobbyError.textContent = '';
-  return entered;
+#particleCanvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 90;
 }
 
-function validateRoomCode() {
-  const code = roomCodeInput.value.trim().toUpperCase();
-  if (!code) {
-    roomCodeInput.classList.add('input-error');
-    lobbyError.textContent = 'Please enter room code to join!';
-    roomCodeInput.focus();
-    return null;
-  }
-  roomCodeInput.classList.remove('input-error');
-  lobbyError.textContent = '';
-  return code;
+.ambient-glow {
+  position: fixed;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 240, 255, 0.14) 0%, transparent 70%);
+  top: 10%;
+  pointer-events: none;
+  filter: blur(60px);
 }
 
-createBtn.addEventListener('click', () => {
-  const validName = validateName();
-  if (!validName) return;
-
-  roomCodeInput.classList.remove('input-error');
-  isHost = true;
-  myName = validName;
-  p1NameLabel.textContent = myName.toUpperCase();
-  lobbyError.textContent = 'Creating room...';
-
-  const prefix = gameMode === 'cricket' ? 'CRIC' : 'RPS';
-  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
-  const roomKey = `${prefix}-${rand}`;
-
-  peer = new Peer(`duel-${roomKey}`);
-
-  peer.on('open', () => {
-    roomCodeLabel.textContent = `ROOM: ${roomKey}`;
-    lobbyScreen.classList.add('hidden');
-    roundStatusText.textContent = 'Waiting for opponent...';
-    applyGameModeUI();
-    highlightTurn();
-    disableButtons(true);
-  });
-
-  peer.on('connection', c => {
-    conn = c;
-    setupConnEvents();
-  });
-
-  peer.on('error', () => {
-    lobbyError.textContent = 'Room error. Tap create again.';
-  });
-});
-
-joinBtn.addEventListener('click', () => {
-  const validName = validateName();
-  if (!validName) return;
-
-  const validCode = validateRoomCode();
-  if (!validCode) return;
-
-  if (validCode.startsWith('CRIC-')) {
-    setGameMode('cricket');
-  } else if (validCode.startsWith('RPS-')) {
-    setGameMode('rps');
-  }
-
-  isHost = false;
-  myName = validName;
-  p1NameLabel.textContent = myName.toUpperCase();
-  lobbyError.textContent = 'Connecting...';
-
-  peer = new Peer();
-
-  peer.on('open', () => {
-    conn = peer.connect(`duel-${validCode}`);
-    conn.on('open', () => {
-      roomCodeLabel.textContent = `ROOM: ${validCode}`;
-      applyGameModeUI();
-      lobbyScreen.classList.add('hidden');
-      setupConnEvents();
-      conn.send({ type: 'handshake', name: myName });
-    });
-    conn.on('error', () => {
-      roomCodeInput.classList.add('input-error');
-      lobbyError.textContent = 'Room not found! Check code.';
-    });
-  });
-
-  peer.on('error', () => {
-    roomCodeInput.classList.add('input-error');
-    lobbyError.textContent = 'Unable to connect to room.';
-  });
-});
-
-function setupConnEvents() {
-  roundStatusText.textContent = 'Opponent connected!';
-  oppActionState.textContent = 'Ready';
-
-  if (isHost) {
-    conn.send({ type: 'init_sync', mode: gameMode, hostName: myName });
-    if (gameMode === 'cricket') {
-      openTossSetupModal();
-    } else {
-      disableButtons(false);
-    }
-  }
-
-  highlightTurn();
-
-  conn.on('data', data => {
-    if (data.type === 'handshake') {
-      oppName = data.name || 'Opponent';
-      p2NameLabel.textContent = oppName.toUpperCase();
-    } else if (data.type === 'init_sync') {
-      gameMode = data.mode;
-      oppName = data.hostName || 'Host';
-      p2NameLabel.textContent = oppName.toUpperCase();
-      applyGameModeUI();
-      if (gameMode === 'cricket') {
-        openTossSetupModal();
-      } else {
-        disableButtons(false);
-      }
-      highlightTurn();
-    } else if (data.type === 'toss_modal_sync') {
-      openTossSetupModal();
-    } else if (data.type === 'toss_start') {
-      tossState.active = true;
-      tossState.format = data.format;
-      tossState.hostCall = data.hostCall;
-      tossState.hostWins = 0;
-      tossState.joinerWins = 0;
-      tossState.round = 1;
-      tossSetupModal.classList.remove('open');
-      promptTossMove();
-    } else if (data.type === 'toss_decision_open') {
-      handleTossDecisionOpen(data.winnerIsHost);
-    } else if (data.type === 'toss_role_decided') {
-      applyTossDecision(data.hostRole);
-    } else if (data.type === 'locked') {
-      oppActionState.textContent = 'Locked!';
-    } else if (data.type === 'move') {
-      oppCurrentChoice = data.choice;
-      checkTurnCompletion();
-    } else if (data.type === 'start_innings_2') {
-      startSecondInnings();
-    } else if (data.type === 'reset') {
-      resetMatchStates(false);
-    }
-  });
-
-  conn.on('close', () => {
-    roundStatusText.textContent = 'Opponent left.';
-    oppActionState.textContent = 'Disconnected';
-    disableButtons(true);
-  });
+/* App Wrapper */
+.game-wrapper {
+  width: 100%;
+  max-width: 440px;
+  height: 100vh;
+  max-height: 840px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 14px 16px;
+  position: relative;
+  z-index: 10;
 }
 
-/* =========================================================
-   TOSS SYSTEM (HAND CRICKET ODD/EVEN VIA 1-6)
-   ========================================================= */
-function openTossSetupModal() {
-  disableButtons(true);
-
-  if (gameMode === 'cricket') {
-    myCricketRole.textContent = 'TOSS';
-    cricketMetaMessage.textContent = 'Waiting for toss to initiate...';
-  }
-
-  tossSetupModal.classList.add('open');
-  if (isHost) {
-    hostTossControls.style.display = 'block';
-    joinerTossWait.style.display = 'none';
-    promptBar.className = 'prompt-bar';
-    promptTitle.textContent = 'TOSS CONFIGURATION';
-    promptSub.textContent = 'Choose format and call above';
-  } else {
-    hostTossControls.style.display = 'none';
-    joinerTossWait.style.display = 'block';
-    promptBar.className = 'prompt-bar';
-    promptTitle.textContent = 'WAITING FOR HOST';
-    promptSub.textContent = 'Host is setting up toss format...';
-  }
+/* Top Bar */
+.top-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-// Toss Format Selection
-tossTypeDefaultBtn.addEventListener('click', () => {
-  tossTypeDefaultBtn.classList.add('active');
-  tossTypeBo3Btn.classList.remove('active');
-  tossState.format = 'single';
-});
-tossTypeBo3Btn.addEventListener('click', () => {
-  tossTypeBo3Btn.classList.add('active');
-  tossTypeDefaultBtn.classList.remove('active');
-  tossState.format = 'bo3';
-});
-
-// Toss Call Selection
-callOddBtn.addEventListener('click', () => {
-  callOddBtn.classList.add('active');
-  callEvenBtn.classList.remove('active');
-  tossState.hostCall = 'odd';
-});
-callEvenBtn.addEventListener('click', () => {
-  callEvenBtn.classList.add('active');
-  callOddBtn.classList.remove('active');
-  tossState.hostCall = 'even';
-});
-
-// Host initiates Toss
-startTossBtn.addEventListener('click', () => {
-  tossState.active = true;
-  tossState.hostWins = 0;
-  tossState.joinerWins = 0;
-  tossState.round = 1;
-
-  if (conn) {
-    conn.send({
-      type: 'toss_start',
-      format: tossState.format,
-      hostCall: tossState.hostCall
-    });
-  }
-
-  tossSetupModal.classList.remove('open');
-  promptTossMove();
-});
-
-function promptTossMove() {
-  promptBar.className = 'prompt-bar';
-  const formatText = tossState.format === 'bo3' ? `(Best of 3 - Round ${tossState.round})` : '(Default)';
-  promptTitle.textContent = `TOSS: PICK 1-6 ${formatText}`;
-  const hostCallText = tossState.hostCall.toUpperCase();
-  const guestCallText = tossState.hostCall === 'odd' ? 'EVEN' : 'ODD';
-  promptSub.textContent = isHost ? `Your Call: ${hostCallText}` : `Opponent Call: ${hostCallText} | Your Call: ${guestCallText}`;
-  myCricketRole.textContent = 'TOSS';
-  cricketMetaMessage.textContent = `Toss in progress. Sum determines Odd/Even!`;
-  resetTurnUI();
+.room-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  padding: 6px 14px;
+  border-radius: 30px;
+  font-family: var(--font-title);
+  font-size: 0.75rem;
+  letter-spacing: 1px;
 }
 
-function evaluateTossDuel() {
-  const p1 = parseInt(myCurrentChoice, 10);
-  const p2 = parseInt(oppCurrentChoice, 10);
-  const sum = p1 + p2;
-  const isOdd = sum % 2 !== 0;
-  const outcomeString = isOdd ? 'odd' : 'even';
-
-  myDisplay.innerHTML = `<span style="font-family:var(--font-title);font-size:2rem;font-weight:900">${p1}</span>`;
-  oppDisplay.innerHTML = `<span style="font-family:var(--font-title);font-size:2rem;font-weight:900">${p2}</span>`;
-
-  // Determine who won this toss duel
-  const hostWonThis = outcomeString === tossState.hostCall;
-  if (hostWonThis) {
-    tossState.hostWins++;
-  } else {
-    tossState.joinerWins++;
-  }
-
-  AudioFX.tap();
-  promptBar.className = 'prompt-bar win';
-  promptTitle.textContent = `SUM = ${sum} (${outcomeString.toUpperCase()})`;
-  const roundWinnerName = hostWonThis ? (isHost ? 'You' : oppName) : (isHost ? oppName : 'You');
-  promptSub.textContent = `${roundWinnerName} won this toss duel!`;
-
-  if (tossState.format === 'single') {
-    concludeToss(hostWonThis);
-  } else {
-    if (tossState.hostWins >= 2 || tossState.joinerWins >= 2) {
-      concludeToss(tossState.hostWins >= 2);
-    } else {
-      tossState.round++;
-      setTimeout(promptTossMove, 1800);
-    }
-  }
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 8px var(--accent-green);
 }
 
-function concludeToss(winnerIsHost) {
-  tossState.active = false;
-  setTimeout(() => {
-    if (isHost && conn) {
-      conn.send({ type: 'toss_decision_open', winnerIsHost });
-    }
-    handleTossDecisionOpen(winnerIsHost);
-  }, 1200);
+.nav-actions {
+  display: flex;
+  gap: 8px;
 }
 
-function handleTossDecisionOpen(winnerIsHost) {
-  disableButtons(true);
-  tossDecisionModal.classList.add('open');
-  const iAmWinner = isHost ? winnerIsHost : !winnerIsHost;
-
-  if (iAmWinner) {
-    tossWinnerHeading.textContent = 'YOU WON THE TOSS!';
-    tossWinnerDesc.textContent = 'Decide whether you want to Bat or Bowl first:';
-    tossDecisionBtns.style.display = 'grid';
-    tossDecisionWait.style.display = 'none';
-  } else {
-    tossWinnerHeading.textContent = `${oppName.toUpperCase()} WON THE TOSS!`;
-    tossWinnerDesc.textContent = 'Waiting for their decision...';
-    tossDecisionBtns.style.display = 'none';
-    tossDecisionWait.style.display = 'block';
-  }
+.icon-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--text-pure);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: var(--trans);
 }
 
-chooseBatBtn.addEventListener('click', () => {
-  const hostRole = isHost ? 'bat' : 'bowl';
-  if (conn) {
-    conn.send({ type: 'toss_role_decided', hostRole });
-  }
-  applyTossDecision(hostRole);
-});
-
-chooseBowlBtn.addEventListener('click', () => {
-  const hostRole = isHost ? 'bowl' : 'bat';
-  if (conn) {
-    conn.send({ type: 'toss_role_decided', hostRole });
-  }
-  applyTossDecision(hostRole);
-});
-
-function applyTossDecision(hostRole) {
-  tossDecisionModal.classList.remove('open');
-  const hostBats = hostRole === 'bat';
-  cricketState.battingPlayerId = hostBats ? (isHost ? 'me' : 'opp') : (isHost ? 'opp' : 'me');
-  cricketState.inPlay = true;
-
-  blastConfetti();
-  syncCricketRoles();
-  resetTurnUI();
+.icon-button:hover {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
 }
 
-/* =========================================================
-   TURN HIGHLIGHTING LOGIC
-   ========================================================= */
-function highlightTurn() {
-  if (gameMode === 'cricket') {
-    if (tossState.active) {
-      p1Card.classList.toggle('turn-active', !isLocked);
-      p2Card.classList.toggle('turn-active', oppActionState.textContent !== 'Locked!');
-    } else if (cricketState.inPlay) {
-      const amIBatting = cricketState.battingPlayerId === 'me';
-      p1Card.classList.toggle('turn-active', amIBatting);
-      p2Card.classList.toggle('turn-active', !amIBatting);
-    } else {
-      p1Card.classList.remove('turn-active');
-      p2Card.classList.remove('turn-active');
-    }
-  } else {
-    p1Card.classList.toggle('turn-active', !isLocked);
-    p2Card.classList.toggle('turn-active', oppActionState.textContent !== 'Locked!');
-  }
+/* Stat Dashboard */
+.stat-dashboard {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-xl);
+  padding: 12px 16px;
+  backdrop-filter: blur(16px);
 }
 
-/* =========================================================
-   TURN EVALUATION ENGINE
-   ========================================================= */
-function checkTurnCompletion() {
-  if (myCurrentChoice !== null && oppCurrentChoice !== null) {
-    disableButtons(true);
-    myDisplay.classList.add('shaking');
-    oppDisplay.classList.add('shaking');
-
-    setTimeout(() => {
-      myDisplay.classList.remove('shaking');
-      oppDisplay.classList.remove('shaking');
-
-      if (gameMode === 'rps') {
-        evaluateRPS();
-      } else if (tossState.active) {
-        evaluateTossDuel();
-      } else if (cricketState.inPlay) {
-        evaluateCricket();
-      }
-    }, 700);
-  }
+.rps-scores {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  text-align: center;
 }
 
-/* =========================================================
-   ROCK PAPER SCISSORS LOGIC
-   ========================================================= */
-const rpsIcons = {
-  rock: 'fa-hand-back-fist',
-  paper: 'fa-hand',
-  scissors: 'fa-hand-scissors'
-};
-
-function evaluateRPS() {
-  myDisplay.innerHTML = `<i class="fas ${rpsIcons[myCurrentChoice]}"></i>`;
-  oppDisplay.innerHTML = `<i class="fas ${rpsIcons[oppCurrentChoice]}"></i>`;
-
-  const beats = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
-
-  if (myCurrentChoice === oppCurrentChoice) {
-    promptBar.className = 'prompt-bar';
-    promptTitle.textContent = 'STANDOFF!';
-    promptSub.textContent = 'Both chose identical hands.';
-  } else if (beats[myCurrentChoice] === oppCurrentChoice) {
-    rpsScoreMe++;
-    promptBar.className = 'prompt-bar win';
-    promptTitle.textContent = 'ROUND WON!';
-    promptSub.textContent = `${myCurrentChoice.toUpperCase()} beats ${oppCurrentChoice.toUpperCase()}`;
-    AudioFX.win();
-    blastConfetti();
-  } else {
-    rpsScoreOpp++;
-    promptBar.className = 'prompt-bar lose';
-    promptTitle.textContent = 'ROUND LOST!';
-    promptSub.textContent = `${oppCurrentChoice.toUpperCase()} counters ${myCurrentChoice.toUpperCase()}`;
-  }
-
-  p1Score.textContent = rpsScoreMe;
-  p2Score.textContent = rpsScoreOpp;
-
-  if (rpsScoreMe >= 3 || rpsScoreOpp >= 3) {
-    setTimeout(() => {
-      showEndModal(rpsScoreMe >= 3, `Best of 5 Series ended ${rpsScoreMe} - ${rpsScoreOpp}!`);
-    }, 800);
-  } else {
-    setTimeout(resetTurnUI, 1800);
-  }
+.side-score {
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  transition: var(--trans);
 }
 
-/* =========================================================
-   HAND CRICKET (1-6) REAL-TIME ENGINE
-   ========================================================= */
-function syncCricketRoles() {
-  const amIBatting = cricketState.battingPlayerId === 'me';
-  myCricketRole.textContent = amIBatting ? 'BATSMAN' : 'BOWLER';
-  myCricketRole.style.color = amIBatting ? 'var(--accent-green)' : 'var(--accent-cyan)';
-  myCricketRole.style.borderColor = amIBatting ? 'var(--accent-green)' : 'var(--accent-cyan)';
-
-  if (cricketState.innings === 1) {
-    targetScoreDisplay.textContent = '--';
-    cricketMetaMessage.textContent = amIBatting
-      ? `1st Innings: ${myName}, score as many as you can!`
-      : `1st Innings: ${oppName} is batting, take the wicket!`;
-  } else {
-    targetScoreDisplay.textContent = cricketState.target;
-    const needed = cricketState.target - cricketState.runs;
-    cricketMetaMessage.textContent = amIBatting
-      ? `2nd Innings: Need ${needed} runs to win!`
-      : `2nd Innings: Defend ${cricketState.target} runs!`;
-  }
-  highlightTurn();
+.side-score.turn-active {
+  background: rgba(0, 240, 255, 0.12);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.25);
 }
 
-function evaluateCricket() {
-  const myPick = parseInt(myCurrentChoice, 10);
-  const oppPick = parseInt(oppCurrentChoice, 10);
-
-  myDisplay.innerHTML = `<span style="font-family:var(--font-title);font-size:2rem;font-weight:900">${myPick}</span>`;
-  oppDisplay.innerHTML = `<span style="font-family:var(--font-title);font-size:2rem;font-weight:900">${oppPick}</span>`;
-
-  const amIBatting = cricketState.battingPlayerId === 'me';
-  const batsmansRun = amIBatting ? myPick : oppPick;
-
-  // WICKET OCCURS
-  if (myPick === oppPick) {
-    AudioFX.out();
-    promptBar.className = 'prompt-bar out';
-    promptTitle.textContent = 'WICKET! OUT!';
-    promptSub.textContent = `Both threw ${myPick}!`;
-    cricketWickets.textContent = '/1';
-
-    if (cricketState.innings === 1) {
-      const targetScore = cricketState.runs + 1;
-      setTimeout(() => {
-        inningsTitle.textContent = "WICKET! 1ST INNINGS OVER";
-        inningsDesc.innerHTML = `Batsman dismissed on <strong>${cricketState.runs}</strong>.<br/>Target to win is <strong>${targetScore}</strong> runs!`;
-        inningsModal.classList.add('open');
-      }, 1000);
-    } else {
-      const bowlerWon = !amIBatting;
-      setTimeout(() => {
-        showEndModal(bowlerWon, bowlerWon
-          ? `Target defended! Opponent fell short by ${cricketState.target - cricketState.runs} runs.`
-          : `Bowled out! Needed ${cricketState.target - cricketState.runs} more runs.`);
-      }, 1000);
-    }
-  } else {
-    // Runs scored
-    cricketState.runs += batsmansRun;
-    cricketRuns.textContent = cricketState.runs;
-    AudioFX.tap();
-
-    promptBar.className = 'prompt-bar win';
-    promptTitle.textContent = `+${batsmansRun} RUNS!`;
-    promptSub.textContent = amIBatting ? 'Great shot!' : 'Batsman scored.';
-
-    if (cricketState.innings === 2) {
-      const needed = cricketState.target - cricketState.runs;
-      if (cricketState.runs >= cricketState.target) {
-        const chaserWon = amIBatting;
-        setTimeout(() => {
-          showEndModal(chaserWon, chaserWon
-            ? `Target reached! Sensational run-chase victory!`
-            : `Opponent chased down the target of ${cricketState.target}!`);
-        }, 800);
-        return;
-      } else {
-        cricketMetaMessage.textContent = amIBatting
-          ? `Need ${needed} runs to win!`
-          : `Defend ${needed} more runs!`;
-      }
-    }
-    setTimeout(resetTurnUI, 1600);
-  }
+.side-score .player-name {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
 }
 
-function startSecondInnings() {
-  inningsModal.classList.remove('open');
-  cricketState.innings = 2;
-  cricketState.target = cricketState.runs + 1;
-  cricketState.runs = 0;
-  cricketState.wickets = 0;
-  cricketState.battingPlayerId = (cricketState.battingPlayerId === 'me') ? 'opp' : 'me';
-
-  cricketRuns.textContent = '0';
-  cricketWickets.textContent = '/0';
-  syncCricketRoles();
-  resetTurnUI();
+.side-score.turn-active .player-name {
+  color: var(--accent-cyan);
 }
 
-/* =========================================================
-   UI HELPERS & BUTTONS
-   ========================================================= */
-function disableButtons(status) {
-  document.querySelectorAll('.choice-tile').forEach(b => {
-    b.disabled = status;
-    if (!status) b.classList.remove('active-pick');
-  });
+.side-score .score-digit {
+  font-family: var(--font-title);
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: var(--accent-cyan);
 }
 
-function resetTurnUI() {
-  myCurrentChoice = null;
-  oppCurrentChoice = null;
-  isLocked = false;
-  myActionState.textContent = 'Your Move';
-  oppActionState.textContent = 'Ready';
-
-  if (!tossState.active && (gameMode === 'rps' || cricketState.inPlay)) {
-    promptBar.className = 'prompt-bar';
-    promptTitle.textContent = 'MAKE YOUR MOVE';
-    promptSub.textContent = 'Tap an option below';
-  }
-
-  if (gameMode === 'rps') {
-    myDisplay.innerHTML = `<i class="fas fa-hand-back-fist"></i>`;
-    oppDisplay.innerHTML = `<i class="fas fa-hand-back-fist"></i>`;
-  } else {
-    myDisplay.innerHTML = `<i class="fas fa-baseball-bat-ball"></i>`;
-    oppDisplay.innerHTML = `<i class="fas fa-baseball-bat-ball"></i>`;
-  }
-
-  if (gameMode === 'rps' || tossState.active || cricketState.inPlay) {
-    disableButtons(false);
-  } else {
-    disableButtons(true);
-  }
-
-  highlightTurn();
+.center-round {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
 
-function showEndModal(isMeWinner, desc) {
-  modalWinnerHeading.textContent = isMeWinner ? 'VICTORY!' : 'DEFEAT!';
-  modalWinnerHeading.style.color = isMeWinner ? 'var(--accent-green)' : 'var(--accent-red)';
-  modalWinnerDesc.textContent = desc;
-  modalBadgeIcon.innerHTML = isMeWinner ? '<i class="fas fa-trophy"></i>' : '<i class="fas fa-skull"></i>';
-  if (isMeWinner) blastConfetti();
-  endModal.classList.add('open');
+.game-badge {
+  font-family: var(--font-title);
+  font-size: 0.65rem;
+  background: rgba(255, 214, 10, 0.12);
+  color: var(--accent-gold);
+  border: 1px solid rgba(255, 214, 10, 0.3);
+  padding: 2px 8px;
+  border-radius: 12px;
 }
 
-function resetMatchStates(broadcast = true) {
-  rpsScoreMe = 0;
-  rpsScoreOpp = 0;
-  p1Score.textContent = '0';
-  p2Score.textContent = '0';
-
-  tossState.active = false;
-  tossState.hostWins = 0;
-  tossState.joinerWins = 0;
-  tossState.round = 1;
-
-  cricketState = {
-    innings: 1,
-    battingPlayerId: null,
-    target: 0,
-    runs: 0,
-    wickets: 0,
-    inPlay: false
-  };
-
-  cricketRuns.textContent = '0';
-  cricketWickets.textContent = '/0';
-  targetScoreDisplay.textContent = '--';
-  myCricketRole.textContent = 'TOSS';
-  cricketMetaMessage.textContent = 'Waiting for toss to initiate...';
-
-  endModal.classList.remove('open');
-  inningsModal.classList.remove('open');
-  tossDecisionModal.classList.remove('open');
-
-  disableButtons(true);
-  resetTurnUI();
-
-  if (broadcast && conn) {
-    conn.send({ type: 'reset' });
-  }
-
-  if (gameMode === 'cricket') {
-    openTossSetupModal();
-    if (isHost && conn) {
-      conn.send({ type: 'toss_modal_sync' });
-    }
-  } else {
-    disableButtons(false);
-  }
+.round-status {
+  font-size: 0.72rem;
+  color: var(--text-muted);
 }
 
-/* =========================================================
-   EVENT LISTENERS
-   ========================================================= */
-document.querySelectorAll('.choice-tile').forEach(tile => {
-  tile.addEventListener('click', () => {
-    if (isLocked || !conn) return;
-    if (gameMode === 'cricket' && !tossState.active && !cricketState.inPlay) return;
+/* Hand Cricket Dashboard */
+.cricket-board {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 
-    isLocked = true;
-    myCurrentChoice = tile.getAttribute('data-choice');
-    tile.classList.add('active-pick');
-    myActionState.textContent = 'Locked!';
-    disableButtons(true);
-    highlightTurn();
-    AudioFX.tap();
+.cricket-stats-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
 
-    conn.send({ type: 'locked' });
-    conn.send({ type: 'move', choice: myCurrentChoice });
+.role-pill {
+  font-family: var(--font-title);
+  font-size: 0.7rem;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(0, 240, 255, 0.15);
+  color: var(--accent-cyan);
+  border: 1px solid var(--accent-cyan);
+}
 
-    checkTurnCompletion();
-  });
-});
+.score-container {
+  font-family: var(--font-title);
+}
 
-inningsOkBtn.addEventListener('click', () => {
-  if (conn) {
-    conn.send({ type: 'start_innings_2' });
+.cricket-score {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: var(--accent-green);
+}
+
+.cricket-wickets {
+  font-size: 1.2rem;
+  color: var(--text-muted);
+}
+
+.target-box {
+  text-align: right;
+}
+
+.target-title {
+  display: block;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.target-num {
+  font-family: var(--font-title);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--accent-gold);
+}
+
+.cricket-meta {
+  font-size: 0.75rem;
+  color: var(--accent-gold);
+  text-align: center;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 4px;
+  border-radius: 8px;
+}
+
+/* Duel Stage */
+.clash-stage {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0.8rem 0;
+}
+
+.duel-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.hand-card {
+  width: 84px;
+  height: 84px;
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  color: var(--accent-cyan);
+  transition: transform 0.25s ease;
+}
+
+.duel-column:last-child .hand-card {
+  color: var(--accent-pink);
+}
+
+.versus-ring {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px dashed var(--panel-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-title);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.stage-tag {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.shaking {
+  animation: duelWiggle 0.5s infinite alternate;
+}
+
+@keyframes duelWiggle {
+  0% { transform: translateY(0) rotate(-6deg); }
+  100% { transform: translateY(-12px) rotate(6deg); }
+}
+
+/* Prompt Banner */
+.prompt-bar {
+  text-align: center;
+  min-height: 48px;
+}
+
+.prompt-bar h3 {
+  font-family: var(--font-title);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.prompt-bar p {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.prompt-bar.win h3 { color: var(--accent-green); }
+.prompt-bar.lose h3 { color: var(--accent-red); }
+.prompt-bar.out h3 { color: var(--accent-red); }
+
+/* Buttons Dock & Tiles */
+.dock-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.button-deck {
+  display: grid;
+  gap: 10px;
+}
+
+.rps-deck {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.cricket-deck {
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.choice-tile {
+  background: linear-gradient(180deg, rgba(30, 41, 69, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-md);
+  color: var(--text-pure);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  outline: none;
+  transition: var(--trans);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  position: relative;
+  overflow: hidden;
+}
+
+.rps-tile {
+  padding: 14px 6px;
+  gap: 6px;
+}
+
+.tile-icon-wrap {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(0, 240, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--trans);
+}
+
+.rps-tile i {
+  font-size: 1.25rem;
+  color: var(--accent-cyan);
+}
+
+.rps-tile span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.num-tile {
+  padding: 16px 0;
+  font-family: var(--font-title);
+  font-size: 1.45rem;
+  font-weight: 900;
+  color: var(--accent-cyan);
+}
+
+.choice-tile:hover:not(:disabled) {
+  border-color: var(--accent-cyan);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(0, 240, 255, 0.25);
+}
+
+.choice-tile:hover:not(:disabled) .tile-icon-wrap {
+  background: var(--accent-cyan);
+}
+
+.choice-tile:hover:not(:disabled) .tile-icon-wrap i {
+  color: #000;
+}
+
+.choice-tile:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.choice-tile.active-pick {
+  border-color: var(--accent-cyan);
+  background: linear-gradient(180deg, rgba(0, 240, 255, 0.25) 0%, rgba(15, 23, 42, 0.9) 100%);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.4);
+}
+
+.choice-tile:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+  filter: grayscale(0.5);
+}
+
+/* Footer */
+.app-credit {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding-top: 4px;
+}
+
+.app-credit strong {
+  color: var(--text-pure);
+}
+
+.required-star {
+  color: var(--accent-red);
+  font-weight: bold;
+}
+
+/* Lobby Overlay */
+.lobby-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 9, 19, 0.96);
+  backdrop-filter: blur(16px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  transition: opacity 0.25s ease;
+}
+
+.lobby-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lobby-box {
+  width: 100%;
+  max-width: 360px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-xl);
+  padding: 1.6rem 1.4rem;
+  text-align: center;
+}
+
+.brand .badge {
+  font-family: var(--font-title);
+  font-size: 0.62rem;
+  background: rgba(0, 240, 255, 0.1);
+  color: var(--accent-cyan);
+  padding: 2px 8px;
+  border-radius: 12px;
+  letter-spacing: 1px;
+}
+
+.brand h2 {
+  font-family: var(--font-title);
+  font-size: 1.2rem;
+  margin: 6px 0 16px 0;
+}
+
+.game-select-group {
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.game-select-group label, .field-group label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.mode-toggles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.mode-btn {
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--panel-border);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: var(--trans);
+}
+
+.mode-btn.active {
+  background: var(--accent-cyan);
+  color: #000;
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+}
+
+.field-group {
+  text-align: left;
+  margin-bottom: 12px;
+}
+
+.field-group input {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--panel-border);
+  color: #fff;
+  font-family: var(--font-text);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.field-group input:focus {
+  border-color: var(--accent-cyan);
+}
+
+.field-group input.input-error {
+  border-color: var(--accent-red);
+  box-shadow: 0 0 10px rgba(255, 51, 102, 0.35);
+  animation: inputShake 0.35s ease;
+}
+
+@keyframes inputShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.btn-cluster {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.action-btn {
+  padding: 12px 0;
+  border-radius: 30px;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  border: none;
+  transition: var(--trans);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-btn.primary {
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-pink));
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(0, 240, 255, 0.3);
+}
+
+.action-btn.secondary {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--panel-border);
+  color: var(--text-pure);
+}
+
+.action-btn.full-btn {
+  width: 100%;
+}
+
+.action-btn:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+.action-btn:active {
+  transform: translateY(1px);
+}
+
+.error-text {
+  color: var(--accent-red);
+  font-size: 0.75rem;
+  margin-top: 10px;
+  min-height: 16px;
+}
+
+/* Modals */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 7, 18, 0.92);
+  backdrop-filter: blur(12px);
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.modal-backdrop.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 340px;
+  background: #101529;
+  border: 1.5px solid var(--panel-border);
+  border-radius: var(--radius-xl);
+  padding: 1.8rem 1.4rem;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+.modal-icon-badge {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: rgba(255, 214, 10, 0.12);
+  color: var(--accent-gold);
+  font-size: 1.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.modal-icon-badge.warning {
+  background: rgba(255, 51, 102, 0.15);
+  color: var(--accent-red);
+}
+
+.modal-card h2 {
+  font-family: var(--font-title);
+  font-size: 1.25rem;
+  margin-bottom: 6px;
+}
+
+.modal-card p {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+  margin-bottom: 16px;
+}
+
+.config-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-align: left;
+  margin-bottom: 5px;
+}
+
+.waiting-text {
+  color: var(--accent-gold) !important;
+  font-weight: 600;
+  padding: 10px;
+}
+
+@media (max-width: 360px) {
+  .cricket-deck {
+    gap: 4px;
   }
-  startSecondInnings();
-});
-
-modalResetBtn.addEventListener('click', () => {
-  resetMatchStates(true);
-});
-
-exitBtn.addEventListener('click', () => window.location.reload());
-
-soundBtn.addEventListener('click', () => {
-  soundOn = !soundOn;
-  soundBtn.innerHTML = soundOn ? '<i class="fas fa-volume-up"></i>' : '<i class="fas fa-volume-xmark"></i>';
-});
+  .num-tile {
+    font-size: 1.2rem;
+    padding: 12px 0;
+  }
+}
