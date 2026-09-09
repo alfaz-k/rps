@@ -3,145 +3,168 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Cyber RPS Online | Multiplayer</title>
+  <title>Cyber Arena | RPS & Hand Cricket</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <link rel="stylesheet" href="style.css" />
-  <!-- Free Global WebRTC P2P Library (No registration or keys required) -->
+  <!-- WebRTC PeerJS CDN -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
-  <div class="glow-orb orb-1"></div>
-  <div class="glow-orb orb-2"></div>
+  <div class="ambient-glow"></div>
   <canvas id="particleCanvas"></canvas>
 
-  <!-- LOBBY SCREEN MODAL -->
+  <!-- LOBBY OVERLAY -->
   <div class="lobby-overlay" id="lobbyScreen">
-    <div class="lobby-card">
-      <div class="logo">
-        <span class="cyber-badge">P2P MULTIPLAYER</span>
-        <h1>CLASH OF HANDS</h1>
+    <div class="lobby-box">
+      <div class="brand">
+        <span class="badge">ONLINE ARENA</span>
+        <h2>DUEL CLASH</h2>
       </div>
-      <p class="lobby-subtitle">Create a room or join your friend's room code</p>
 
-      <div class="lobby-form">
-        <div class="input-group">
-          <label for="playerNameInput">Your Handle</label>
-          <input type="text" id="playerNameInput" placeholder="e.g., Alfaz" maxlength="12" />
-        </div>
-
-        <div class="input-group">
-          <label for="roomCodeInput">Room Code (Enter to Join)</label>
-          <input type="text" id="roomCodeInput" placeholder="e.g., 4-digit code" maxlength="6" style="text-transform:uppercase" />
-        </div>
-
-        <div class="lobby-actions">
-          <button id="joinBtn" class="primary-btn">Join Room</button>
-          <button id="createBtn" class="secondary-btn">Create Room</button>
+      <div class="game-select-group">
+        <label>SELECT GAME</label>
+        <div class="mode-toggles">
+          <button type="button" class="mode-btn active" data-game="rps">RPS</button>
+          <button type="button" class="mode-btn" data-game="cricket">Hand Cricket</button>
         </div>
       </div>
-      <p class="error-msg" id="lobbyError"></p>
+
+      <div class="field-group">
+        <label>YOUR NAME</label>
+        <input type="text" id="playerNameInput" placeholder="Player" maxlength="10" />
+      </div>
+
+      <div class="field-group">
+        <label>ROOM CODE (TO JOIN)</label>
+        <input type="text" id="roomCodeInput" placeholder="4-DIGIT CODE" maxlength="6" />
+      </div>
+
+      <div class="btn-cluster">
+        <button id="createBtn" class="action-btn primary">Create Room</button>
+        <button id="joinBtn" class="action-btn secondary">Join Room</button>
+      </div>
+      <p class="error-text" id="lobbyError"></p>
     </div>
   </div>
 
-  <!-- MAIN APP CONTAINER -->
-  <div class="app-container">
-    <header class="game-header">
-      <div class="logo">
-        <span class="cyber-badge" id="activeRoomCode">ROOM: ---</span>
-        <h1>ARENA DUEL</h1>
+  <!-- MAIN VIEWPORT -->
+  <div class="game-wrapper">
+    <!-- Clean Top Bar -->
+    <header class="top-nav">
+      <div class="room-indicator">
+        <span class="pulse-dot"></span>
+        <span id="roomCodeLabel">ROOM: ---</span>
       </div>
-
-      <div class="controls-bar">
-        <button id="soundToggle" class="icon-circle-btn" aria-label="Toggle Sound">
-          <i class="fas fa-volume-up"></i>
-        </button>
-        <button id="leaveRoomBtn" class="icon-circle-btn" title="Exit Match">
-          <i class="fas fa-arrow-right-from-bracket"></i>
-        </button>
+      <div class="nav-actions">
+        <button id="soundBtn" class="icon-button" aria-label="Sound"><i class="fas fa-volume-up"></i></button>
+        <button id="exitBtn" class="icon-button" aria-label="Exit"><i class="fas fa-right-from-bracket"></i></button>
       </div>
     </header>
 
-    <!-- Scoreboard -->
-    <section class="scoreboard-wrapper">
-      <div class="score-card player-card">
-        <span class="badge" id="player1Name">YOU</span>
-        <div class="score-number" id="player1Score">0</div>
-        <div class="match-pips" id="player1Pips"></div>
+    <!-- Dashboard: Switches according to game mode -->
+    <section class="stat-dashboard" id="statDashboard">
+      <!-- Standard RPS Header Dashboard -->
+      <div class="rps-scores" id="rpsBoard">
+        <div class="side-score">
+          <span class="player-name" id="p1NameLabel">YOU</span>
+          <span class="score-digit" id="p1Score">0</span>
+        </div>
+        <div class="center-round">
+          <span class="game-badge" id="gameTypeBadge">RPS</span>
+          <span class="round-status" id="roundStatusText">Waiting for connection...</span>
+        </div>
+        <div class="side-score">
+          <span class="player-name" id="p2NameLabel">OPPONENT</span>
+          <span class="score-digit" id="p2Score">0</span>
+        </div>
       </div>
 
-      <div class="match-info-center">
-        <div class="match-badge">BEST OF 5</div>
-        <div class="status-indicator" id="roomStatusText">Connecting...</div>
-      </div>
-
-      <div class="score-card bot-card">
-        <span class="badge" id="player2Name">OPPONENT</span>
-        <div class="score-number" id="player2Score">0</div>
-        <div class="match-pips" id="player2Pips"></div>
+      <!-- Hand Cricket Calculator Dashboard -->
+      <div class="cricket-board" id="cricketBoard" style="display: none;">
+        <div class="cricket-stats-top">
+          <div class="role-pill" id="myCricketRole">BATSMAN</div>
+          <div class="score-container">
+            <span class="cricket-score" id="cricketRuns">0</span>
+            <span class="cricket-wickets" id="cricketWickets">/0</span>
+          </div>
+          <div class="target-box" id="targetContainer">
+            <span class="target-title">TARGET</span>
+            <span class="target-num" id="targetScoreDisplay">--</span>
+          </div>
+        </div>
+        <div class="cricket-meta" id="cricketMetaMessage">1st Innings: Set the target!</div>
       </div>
     </section>
 
-    <!-- Battle Stage -->
-    <main class="battle-stage">
-      <div class="fighter player-fighter">
-        <div class="hand-display" id="myHand">
-          <i class="fas fa-fist-raised default-icon"></i>
+    <!-- Visual Arena -->
+    <main class="clash-stage">
+      <div class="duel-column">
+        <div class="hand-card" id="myDisplay">
+          <i class="fas fa-hand-back-fist default-icon"></i>
         </div>
-        <span class="fighter-tag" id="myStatusTag">Your Move</span>
+        <span class="stage-tag" id="myActionState">Ready</span>
       </div>
 
-      <div class="vs-divider">
-        <span class="vs-text">VS</span>
-      </div>
+      <div class="versus-ring">VS</div>
 
-      <div class="fighter bot-fighter">
-        <div class="hand-display" id="opponentHand">
-          <i class="fas fa-fist-raised default-icon"></i>
+      <div class="duel-column">
+        <div class="hand-card" id="oppDisplay">
+          <i class="fas fa-hand-back-fist default-icon"></i>
         </div>
-        <span class="fighter-tag" id="opponentStatusTag">Waiting...</span>
+        <span class="stage-tag" id="oppActionState">Waiting...</span>
       </div>
     </main>
 
-    <!-- Result Announcement Banner -->
-    <div class="result-banner" id="resultBanner">
-      <h2 id="resultTitle">LOCK YOUR CHOICE</h2>
-      <p id="resultSubtitle">Tap an action below to strike</p>
+    <!-- Live Status Pill -->
+    <div class="prompt-bar" id="promptBar">
+      <h3 id="promptTitle">MAKE YOUR MOVE</h3>
+      <p id="promptSub">Tap an option below</p>
     </div>
 
-    <!-- Actions Dock -->
-    <section class="action-dock">
-      <button class="choice-btn" data-choice="rock" aria-label="Pick Rock">
-        <div class="icon-wrap"><i class="fas fa-hand-back-fist"></i></div>
-        <span class="btn-name">Rock</span>
-      </button>
+    <!-- Dynamic Actions Dock (RPS or 1-6 Cricket Buttons) -->
+    <section class="dock-container" id="dockContainer">
+      <!-- RPS Controls -->
+      <div class="button-deck rps-deck" id="rpsDeck">
+        <button class="choice-tile" data-choice="rock">
+          <i class="fas fa-hand-back-fist"></i>
+          <span>Rock</span>
+        </button>
+        <button class="choice-tile" data-choice="paper">
+          <i class="fas fa-hand"></i>
+          <span>Paper</span>
+        </button>
+        <button class="choice-tile" data-choice="scissors">
+          <i class="fas fa-hand-scissors"></i>
+          <span>Scissors</span>
+        </button>
+      </div>
 
-      <button class="choice-btn" data-choice="paper" aria-label="Pick Paper">
-        <div class="icon-wrap"><i class="fas fa-hand"></i></div>
-        <span class="btn-name">Paper</span>
-      </button>
-
-      <button class="choice-btn" data-choice="scissors" aria-label="Pick Scissors">
-        <div class="icon-wrap"><i class="fas fa-hand-scissors"></i></div>
-        <span class="btn-name">Scissors</span>
-      </button>
+      <!-- Hand Cricket (1 to 6 Only) Controls -->
+      <div class="button-deck cricket-deck" id="cricketDeck" style="display: none;">
+        <button class="choice-tile num-tile" data-choice="1">1</button>
+        <button class="choice-tile num-tile" data-choice="2">2</button>
+        <button class="choice-tile num-tile" data-choice="3">3</button>
+        <button class="choice-tile num-tile" data-choice="4">4</button>
+        <button class="choice-tile num-tile" data-choice="5">5</button>
+        <button class="choice-tile num-tile" data-choice="6">6</button>
+      </div>
     </section>
 
-    <!-- Footer with Copyright -->
-    <footer class="app-footer">
-      <p>&copy; <span id="currentYear"></span> <strong>Alfaz Kaladagi</strong>. All Rights Reserved.</p>
+    <footer class="app-credit">
+      &copy; <span id="yearEl"></span> <strong>Alfaz Kaladagi</strong>. All Rights Reserved.
     </footer>
   </div>
 
-  <!-- End of Match Series Modal -->
-  <div class="modal-overlay" id="matchModal">
-    <div class="modal-card">
-      <div class="modal-icon" id="modalIcon"><i class="fas fa-crown"></i></div>
-      <h2 id="modalTitle">CHAMPION!</h2>
-      <p id="modalDesc">Series concluded.</p>
-      <button class="modal-btn" id="modalPlayAgain">Play Again</button>
+  <!-- End Game Notification Modal -->
+  <div class="end-modal" id="endModal">
+    <div class="end-modal-box">
+      <div class="modal-badge-icon" id="modalBadgeIcon"><i class="fas fa-trophy"></i></div>
+      <h2 id="modalWinnerHeading">VICTORY!</h2>
+      <p id="modalWinnerDesc">Winner statement goes here.</p>
+      <button class="action-btn primary" id="modalResetBtn">Play Again</button>
     </div>
   </div>
 
