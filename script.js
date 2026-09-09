@@ -415,9 +415,20 @@ function setupConnEvents() {
         openTossSetupModal();
       }
       highlightTurn();
-    } else if (data.type === 'init_toss_cycle') {
+    } else if (data.type === 'request_rematch') {
+      // Handles rematch cleanly whether clicked by host or guest
       resetMatchStates(false);
-      openTossSetupModal();
+      if (gameMode === 'cricket') {
+        openTossSetupModal();
+        if (isHost) {
+          showToast('Rematch started! Set up the toss.', 'warning');
+        } else {
+          showToast('Rematch started! Waiting for host toss...', 'info');
+        }
+      } else {
+        showToast('RPS series reset for replay!', 'success');
+        resetTurnUI();
+      }
     } else if (data.type === 'toss_call_update') {
       tossState.hostCall = data.hostCall;
       updateTossBadges();
@@ -444,11 +455,6 @@ function setupConnEvents() {
       checkTurnCompletion();
     } else if (data.type === 'start_innings_2') {
       startSecondInnings();
-    } else if (data.type === 'reset') {
-      resetMatchStates(false);
-      if (gameMode === 'cricket') {
-        openTossSetupModal();
-      }
     }
   });
 
@@ -483,6 +489,13 @@ function openTossSetupModal() {
   if (isHost) {
     hostTossControls.style.display = 'block';
     joinerTossWait.style.display = 'none';
+    // Reset default selections
+    tossTypeDefaultBtn.classList.add('active');
+    tossTypeBo3Btn.classList.remove('active');
+    callOddBtn.classList.add('active');
+    callEvenBtn.classList.remove('active');
+    tossState.format = 'single';
+    tossState.hostCall = 'odd';
   } else {
     hostTossControls.style.display = 'none';
     joinerTossWait.style.display = 'block';
@@ -815,6 +828,7 @@ function startSecondInnings() {
   cricketState.target = cricketState.runs + 1;
   cricketState.runs = 0;
   cricketState.wickets = 0;
+  // Swap roles
   cricketState.battingPlayerId = (cricketState.battingPlayerId === 'me') ? 'opp' : 'me';
 
   cricketRuns.textContent = '0';
@@ -871,11 +885,13 @@ function showEndModal(isMeWinner, desc) {
    RESTART & RESET STATE MACHINE
    ========================================================= */
 function resetMatchStates(broadcast = true) {
+  // Wipe RPS series
   rpsScoreMe = 0;
   rpsScoreOpp = 0;
   p1Score.textContent = '0';
   p2Score.textContent = '0';
 
+  // Wipe Hand Cricket completely
   cricketState = {
     innings: 1,
     battingPlayerId: null,
@@ -889,6 +905,7 @@ function resetMatchStates(broadcast = true) {
   myCricketRole.textContent = 'TOSS';
   cricketMetaMessage.textContent = 'Waiting for toss to initiate...';
 
+  // Wipe Toss
   tossState = {
     active: false,
     format: 'single',
@@ -905,16 +922,11 @@ function resetMatchStates(broadcast = true) {
   tossDecisionModal.classList.remove('open');
 
   if (broadcast && conn) {
-    conn.send({ type: 'reset' });
+    conn.send({ type: 'request_rematch' });
   }
 
   if (gameMode === 'cricket') {
-    if (isHost) {
-      if (broadcast && conn) {
-        conn.send({ type: 'init_toss_cycle' });
-      }
-      openTossSetupModal();
-    }
+    openTossSetupModal();
   } else {
     resetTurnUI();
   }
