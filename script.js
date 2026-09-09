@@ -11,7 +11,7 @@ let isHost = false;
 let isLocked = false;
 let soundOn = true;
 
-// RPS State
+// RPS Series State
 let rpsScoreMe = 0;
 let rpsScoreOpp = 0;
 
@@ -68,6 +68,12 @@ const promptSub = document.getElementById('promptSub');
 
 const soundBtn = document.getElementById('soundBtn');
 const exitBtn = document.getElementById('exitBtn');
+
+// Modals
+const inningsModal = document.getElementById('inningsModal');
+const inningsTitle = document.getElementById('inningsTitle');
+const inningsDesc = document.getElementById('inningsDesc');
+const inningsOkBtn = document.getElementById('inningsOkBtn');
 
 const endModal = document.getElementById('endModal');
 const modalBadgeIcon = document.getElementById('modalBadgeIcon');
@@ -209,7 +215,6 @@ function applyGameModeUI() {
   }
 }
 
-// Auto-detect prefix when pasting room code
 roomCodeInput.addEventListener('input', () => {
   const val = roomCodeInput.value.trim().toUpperCase();
   if (val.startsWith('CRIC-')) {
@@ -244,7 +249,6 @@ createBtn.addEventListener('click', () => {
   p1NameLabel.textContent = myName.toUpperCase();
   lobbyError.textContent = 'Creating room...';
 
-  // Specific game prefixes ensure routing
   const prefix = gameMode === 'cricket' ? 'CRIC' : 'RPS';
   const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
   const roomKey = `${prefix}-${rand}`;
@@ -280,7 +284,6 @@ joinBtn.addEventListener('click', () => {
     return;
   }
 
-  // Detect and enforce game mode from room code
   if (rawCode.startsWith('CRIC-')) {
     setGameMode('cricket');
   } else if (rawCode.startsWith('RPS-')) {
@@ -347,6 +350,8 @@ function setupConnEvents() {
     } else if (data.type === 'move') {
       oppCurrentChoice = data.choice;
       checkTurnCompletion();
+    } else if (data.type === 'start_innings_2') {
+      startSecondInnings();
     } else if (data.type === 'reset') {
       resetMatchStates();
     }
@@ -368,7 +373,6 @@ function highlightTurn() {
     p1Card.classList.toggle('turn-active', amIBatting);
     p2Card.classList.toggle('turn-active', !amIBatting);
   } else {
-    // In RPS both players choose simultaneously
     p1Card.classList.toggle('turn-active', !isLocked);
     p2Card.classList.toggle('turn-active', oppActionState.textContent !== 'Locked!');
   }
@@ -432,12 +436,13 @@ function evaluateRPS() {
   p1Score.textContent = rpsScoreMe;
   p2Score.textContent = rpsScoreOpp;
 
+  // Best of 5 check
   if (rpsScoreMe >= 3 || rpsScoreOpp >= 3) {
     setTimeout(() => {
-      showEndModal(rpsScoreMe >= 3, `Best of 5 finished: ${rpsScoreMe}-${rpsScoreOpp}`);
+      showEndModal(rpsScoreMe >= 3, `Best of 5 Series ended ${rpsScoreMe} - ${rpsScoreOpp}!`);
     }, 800);
   } else {
-    setTimeout(resetTurnUI, 2000);
+    setTimeout(resetTurnUI, 1800);
   }
 }
 
@@ -475,37 +480,33 @@ function evaluateCricket() {
   const amIBatting = cricketState.battingPlayerId === 'me';
   const batsmansRun = amIBatting ? myPick : oppPick;
 
-  // Check OUT condition
+  // WICKET OCCURS
   if (myPick === oppPick) {
     AudioFX.out();
     promptBar.className = 'prompt-bar out';
     promptTitle.textContent = 'WICKET! OUT!';
-    promptSub.textContent = `Both chose ${myPick}!`;
-
+    promptSub.textContent = `Both threw ${myPick}!`;
     cricketWickets.textContent = '/1';
 
     if (cricketState.innings === 1) {
+      // Show persistent Innings Break modal (requires OK)
+      const targetScore = cricketState.runs + 1;
       setTimeout(() => {
-        cricketState.innings = 2;
-        cricketState.target = cricketState.runs + 1;
-        cricketState.runs = 0;
-        cricketState.wickets = 0;
-        cricketState.battingPlayerId = amIBatting ? 'opp' : 'me';
-
-        cricketRuns.textContent = '0';
-        cricketWickets.textContent = '/0';
-        syncCricketRoles();
-        resetTurnUI();
-      }, 2000);
+        inningsTitle.textContent = "WICKET! 1ST INNINGS OVER";
+        inningsDesc.innerHTML = `Batsman dismissed on <strong>${cricketState.runs}</strong>.<br/>Target to win is <strong>${targetScore}</strong> runs!`;
+        inningsModal.classList.add('open');
+      }, 1000);
     } else {
+      // 2nd innings wicket -> Bowler wins
       const bowlerWon = !amIBatting;
       setTimeout(() => {
         showEndModal(bowlerWon, bowlerWon
           ? `Target defended! Opponent fell short by ${cricketState.target - cricketState.runs} runs.`
-          : `Bowled out! Needed ${cricketState.target - cricketState.runs} more runs.`);
+          : `Bowled out! Fell short by ${cricketState.target - cricketState.runs} runs.`);
       }, 1000);
     }
   } else {
+    // Runs scored
     cricketState.runs += batsmansRun;
     cricketRuns.textContent = cricketState.runs;
     AudioFX.tap();
@@ -514,15 +515,16 @@ function evaluateCricket() {
     promptTitle.textContent = `+${batsmansRun} RUNS!`;
     promptSub.textContent = amIBatting ? 'Great shot!' : 'Batsman scored.';
 
+    // Check if target chased in 2nd Innings
     if (cricketState.innings === 2) {
       const needed = cricketState.target - cricketState.runs;
       if (cricketState.runs >= cricketState.target) {
         const chaserWon = amIBatting;
         setTimeout(() => {
           showEndModal(chaserWon, chaserWon
-            ? `Target reached! Tremendous run-chase!`
+            ? `Target reached! Sensational run-chase victory!`
             : `Opponent chased down the target of ${cricketState.target}!`);
-        }, 1000);
+        }, 800);
         return;
       } else {
         cricketMetaMessage.textContent = amIBatting
@@ -532,6 +534,21 @@ function evaluateCricket() {
     }
     setTimeout(resetTurnUI, 1600);
   }
+}
+
+function startSecondInnings() {
+  inningsModal.classList.remove('open');
+  cricketState.innings = 2;
+  cricketState.target = cricketState.runs + 1;
+  cricketState.runs = 0;
+  cricketState.wickets = 0;
+  // Swap roles
+  cricketState.battingPlayerId = (cricketState.battingPlayerId === 'me') ? 'opp' : 'me';
+
+  cricketRuns.textContent = '0';
+  cricketWickets.textContent = '/0';
+  syncCricketRoles();
+  resetTurnUI();
 }
 
 /* =========================================================
@@ -593,11 +610,14 @@ function resetMatchStates() {
   targetScoreDisplay.textContent = '--';
 
   endModal.classList.remove('open');
+  inningsModal.classList.remove('open');
   if (gameMode === 'cricket') syncCricketRoles();
   resetTurnUI();
 }
 
-// User Move Selection
+/* =========================================================
+   EVENT LISTENERS
+   ========================================================= */
 document.querySelectorAll('.choice-tile').forEach(tile => {
   tile.addEventListener('click', () => {
     if (isLocked || !conn) return;
@@ -616,8 +636,19 @@ document.querySelectorAll('.choice-tile').forEach(tile => {
   });
 });
 
+// Innings OK button
+inningsOkBtn.addEventListener('click', () => {
+  if (conn) {
+    conn.send({ type: 'start_innings_2' });
+  }
+  startSecondInnings();
+});
+
+// Replay OK button
 modalResetBtn.addEventListener('click', () => {
-  if (conn) conn.send({ type: 'reset' });
+  if (conn) {
+    conn.send({ type: 'reset' });
+  }
   resetMatchStates();
 });
 
