@@ -24,6 +24,17 @@ let cricketState = {
   wickets: 0
 };
 
+// Toss State (Odd/Even Hand Cricket Style)
+let tossState = {
+  active: false,
+  format: 'single',     // 'single' (Default) or 'bo3'
+  hostCall: 'odd',      // 'odd' or 'even'
+  hostWins: 0,
+  joinerWins: 0,
+  round: 1,
+  winnerId: null        // 'me' or 'opp'
+};
+
 let myCurrentChoice = null;
 let oppCurrentChoice = null;
 
@@ -69,7 +80,25 @@ const promptSub = document.getElementById('promptSub');
 const soundBtn = document.getElementById('soundBtn');
 const exitBtn = document.getElementById('exitBtn');
 
-// Modals
+// Toss Modals & Controls
+const tossSetupModal = document.getElementById('tossSetupModal');
+const hostTossControls = document.getElementById('hostTossControls');
+const joinerTossWait = document.getElementById('joinerTossWait');
+const tossTypeDefaultBtn = document.getElementById('tossTypeDefaultBtn');
+const tossTypeBo3Btn = document.getElementById('tossTypeBo3Btn');
+const callOddBtn = document.getElementById('callOddBtn');
+const callEvenBtn = document.getElementById('callEvenBtn');
+const startTossBtn = document.getElementById('startTossBtn');
+
+const tossDecisionModal = document.getElementById('tossDecisionModal');
+const tossWinnerHeading = document.getElementById('tossWinnerHeading');
+const tossWinnerDesc = document.getElementById('tossWinnerDesc');
+const tossDecisionBtns = document.getElementById('tossDecisionBtns');
+const tossDecisionWait = document.getElementById('tossDecisionWait');
+const chooseBatBtn = document.getElementById('chooseBatBtn');
+const chooseBowlBtn = document.getElementById('chooseBowlBtn');
+
+// Match & Innings Modals
 const inningsModal = document.getElementById('inningsModal');
 const inningsTitle = document.getElementById('inningsTitle');
 const inningsDesc = document.getElementById('inningsDesc');
@@ -324,8 +353,7 @@ function setupConnEvents() {
   if (isHost) {
     conn.send({ type: 'init_sync', mode: gameMode, hostName: myName });
     if (gameMode === 'cricket') {
-      cricketState.battingPlayerId = 'me'; // Host bats first
-      syncCricketRoles();
+      openTossSetupModal();
     }
   }
 
@@ -341,10 +369,22 @@ function setupConnEvents() {
       p2NameLabel.textContent = oppName.toUpperCase();
       applyGameModeUI();
       if (gameMode === 'cricket') {
-        cricketState.battingPlayerId = 'opp'; // Joiner bowls first
-        syncCricketRoles();
+        openTossSetupModal();
       }
       highlightTurn();
+    } else if (data.type === 'toss_start') {
+      tossState.active = true;
+      tossState.format = data.format;
+      tossState.hostCall = data.hostCall;
+      tossState.hostWins = 0;
+      tossState.joinerWins = 0;
+      tossState.round = 1;
+      tossSetupModal.classList.remove('open');
+      promptTossMove();
+    } else if (data.type === 'toss_decision_open') {
+      handleTossDecisionOpen(data.winnerIsHost);
+    } else if (data.type === 'toss_role_decided') {
+      applyTossDecision(data.hostRole);
     } else if (data.type === 'locked') {
       oppActionState.textContent = 'Locked!';
     } else if (data.type === 'move') {
@@ -365,13 +405,171 @@ function setupConnEvents() {
 }
 
 /* =========================================================
+   TOSS SYSTEM (HAND CRICKET ODD/EVEN VIA 1-6)
+   ========================================================= */
+function openTossSetupModal() {
+  tossSetupModal.classList.add('open');
+  if (isHost) {
+    hostTossControls.style.display = 'block';
+    joinerTossWait.style.display = 'none';
+  } else {
+    hostTossControls.style.display = 'none';
+    joinerTossWait.style.display = 'block';
+  }
+}
+
+// Toss Format Selection
+tossTypeDefaultBtn.addEventListener('click', () => {
+  tossTypeDefaultBtn.classList.add('active');
+  tossTypeBo3Btn.classList.remove('active');
+  tossState.format = 'single';
+});
+tossTypeBo3Btn.addEventListener('click', () => {
+  tossTypeBo3Btn.classList.add('active');
+  tossTypeDefaultBtn.classList.remove('active');
+  tossState.format = 'bo3';
+});
+
+// Toss Call Selection
+callOddBtn.addEventListener('click', () => {
+  callOddBtn.classList.add('active');
+  callEvenBtn.classList.remove('active');
+  tossState.hostCall = 'odd';
+});
+callEvenBtn.addEventListener('click', () => {
+  callEvenBtn.classList.add('active');
+  callOddBtn.classList.remove('active');
+  tossState.hostCall = 'even';
+});
+
+// Host initiates Toss
+startTossBtn.addEventListener('click', () => {
+  tossState.active = true;
+  tossState.hostWins = 0;
+  tossState.joinerWins = 0;
+  tossState.round = 1;
+
+  conn.send({
+    type: 'toss_start',
+    format: tossState.format,
+    hostCall: tossState.hostCall
+  });
+
+  tossSetupModal.classList.remove('open');
+  promptTossMove();
+});
+
+function promptTossMove() {
+  promptBar.className = 'prompt-bar';
+  const formatText = tossState.format === 'bo3' ? `(Best of 3 - Round ${tossState.round})` : '(Default)';
+  promptTitle.textContent = `TOSS: PICK 1-6 ${formatText}`;
+  const hostCallText = tossState.hostCall.toUpperCase();
+  const guestCallText = tossState.hostCall === 'odd' ? 'EVEN' : 'ODD';
+  promptSub.textContent = isHost ? `Your Call: ${hostCallText}` : `Opponent Call: ${hostCallText} | Your Call: ${guestCallText}`;
+  myCricketRole.textContent = 'TOSS';
+  cricketMetaMessage.textContent = `Toss in progress. Sum determines Odd/Even!`;
+  resetTurnUI();
+}
+
+function evaluateTossDuel() {
+  const p1 = parseInt(myCurrentChoice, 10);
+  const p2 = parseInt(oppCurrentChoice, 10);
+  const sum = p1 + p2;
+  const isOdd = sum % 2 !== 0;
+  const outcomeString = isOdd ? 'odd' : 'even';
+
+  myDisplay.innerHTML = `<span style="font-family:var(--font-title);font-size:2rem;font-weight:900">${p1}</span>`;
+  oppDisplay.innerHTML = `<span style="font-family:var(--font-title);font-size:2rem;font-weight:900">${p2}</span>`;
+
+  // Determine who won this toss duel
+  const hostWonThis = outcomeString === tossState.hostCall;
+  if (hostWonThis) {
+    tossState.hostWins++;
+  } else {
+    tossState.joinerWins++;
+  }
+
+  AudioFX.tap();
+  promptBar.className = 'prompt-bar win';
+  promptTitle.textContent = `SUM = ${sum} (${outcomeString.toUpperCase()})`;
+  const roundWinnerName = hostWonThis ? (isHost ? 'You' : oppName) : (isHost ? oppName : 'You');
+  promptSub.textContent = `${roundWinnerName} won this toss duel!`;
+
+  if (tossState.format === 'single') {
+    concludeToss(hostWonThis);
+  } else {
+    // Best of 3 Toss
+    if (tossState.hostWins >= 2 || tossState.joinerWins >= 2) {
+      concludeToss(tossState.hostWins >= 2);
+    } else {
+      tossState.round++;
+      setTimeout(promptTossMove, 1800);
+    }
+  }
+}
+
+function concludeToss(winnerIsHost) {
+  tossState.active = false;
+  setTimeout(() => {
+    if (isHost) {
+      conn.send({ type: 'toss_decision_open', winnerIsHost });
+    }
+    handleTossDecisionOpen(winnerIsHost);
+  }, 1200);
+}
+
+function handleTossDecisionOpen(winnerIsHost) {
+  tossDecisionModal.classList.add('open');
+  const iAmWinner = isHost ? winnerIsHost : !winnerIsHost;
+
+  if (iAmWinner) {
+    tossWinnerHeading.textContent = 'YOU WON THE TOSS!';
+    tossWinnerDesc.textContent = 'Decide whether you want to Bat or Bowl first:';
+    tossDecisionBtns.style.display = 'grid';
+    tossDecisionWait.style.display = 'none';
+  } else {
+    tossWinnerHeading.textContent = `${oppName.toUpperCase()} WON THE TOSS!`;
+    tossWinnerDesc.textContent = 'Waiting for their decision...';
+    tossDecisionBtns.style.display = 'none';
+    tossDecisionWait.style.display = 'block';
+  }
+}
+
+chooseBatBtn.addEventListener('click', () => {
+  const hostRole = isHost ? 'bat' : 'bowl';
+  conn.send({ type: 'toss_role_decided', hostRole });
+  applyTossDecision(hostRole);
+});
+
+chooseBowlBtn.addEventListener('click', () => {
+  const hostRole = isHost ? 'bowl' : 'bat';
+  conn.send({ type: 'toss_role_decided', hostRole });
+  applyTossDecision(hostRole);
+});
+
+function applyTossDecision(hostRole) {
+  tossDecisionModal.classList.remove('open');
+  const hostBats = hostRole === 'bat';
+  cricketState.battingPlayerId = hostBats ? (isHost ? 'me' : 'opp') : (isHost ? 'opp' : 'me');
+
+  blastConfetti();
+  syncCricketRoles();
+  resetTurnUI();
+}
+
+/* =========================================================
    TURN HIGHLIGHTING LOGIC
    ========================================================= */
 function highlightTurn() {
   if (gameMode === 'cricket') {
-    const amIBatting = cricketState.battingPlayerId === 'me';
-    p1Card.classList.toggle('turn-active', amIBatting);
-    p2Card.classList.toggle('turn-active', !amIBatting);
+    if (tossState.active) {
+      p1Card.classList.toggle('turn-active', !isLocked);
+      p2Card.classList.toggle('turn-active', oppActionState.textContent !== 'Locked!');
+    } else {
+      const amIBatting = cricketState.battingPlayerId === 'me';
+      p1Card.classList.toggle('turn-active', amIBatting);
+      p2Card.classList.toggle('turn-active', !amIBatting);
+    }
   } else {
     p1Card.classList.toggle('turn-active', !isLocked);
     p2Card.classList.toggle('turn-active', oppActionState.textContent !== 'Locked!');
@@ -393,6 +591,8 @@ function checkTurnCompletion() {
 
       if (gameMode === 'rps') {
         evaluateRPS();
+      } else if (tossState.active) {
+        evaluateTossDuel();
       } else {
         evaluateCricket();
       }
@@ -436,7 +636,6 @@ function evaluateRPS() {
   p1Score.textContent = rpsScoreMe;
   p2Score.textContent = rpsScoreOpp;
 
-  // Best of 5 check
   if (rpsScoreMe >= 3 || rpsScoreOpp >= 3) {
     setTimeout(() => {
       showEndModal(rpsScoreMe >= 3, `Best of 5 Series ended ${rpsScoreMe} - ${rpsScoreOpp}!`);
@@ -489,7 +688,6 @@ function evaluateCricket() {
     cricketWickets.textContent = '/1';
 
     if (cricketState.innings === 1) {
-      // Show persistent Innings Break modal (requires OK)
       const targetScore = cricketState.runs + 1;
       setTimeout(() => {
         inningsTitle.textContent = "WICKET! 1ST INNINGS OVER";
@@ -497,12 +695,11 @@ function evaluateCricket() {
         inningsModal.classList.add('open');
       }, 1000);
     } else {
-      // 2nd innings wicket -> Bowler wins
       const bowlerWon = !amIBatting;
       setTimeout(() => {
         showEndModal(bowlerWon, bowlerWon
           ? `Target defended! Opponent fell short by ${cricketState.target - cricketState.runs} runs.`
-          : `Bowled out! Fell short by ${cricketState.target - cricketState.runs} runs.`);
+          : `Bowled out! Needed ${cricketState.target - cricketState.runs} more runs.`);
       }, 1000);
     }
   } else {
@@ -515,7 +712,6 @@ function evaluateCricket() {
     promptTitle.textContent = `+${batsmansRun} RUNS!`;
     promptSub.textContent = amIBatting ? 'Great shot!' : 'Batsman scored.';
 
-    // Check if target chased in 2nd Innings
     if (cricketState.innings === 2) {
       const needed = cricketState.target - cricketState.runs;
       if (cricketState.runs >= cricketState.target) {
@@ -568,9 +764,11 @@ function resetTurnUI() {
   myActionState.textContent = 'Your Move';
   oppActionState.textContent = 'Ready';
 
-  promptBar.className = 'prompt-bar';
-  promptTitle.textContent = 'MAKE YOUR MOVE';
-  promptSub.textContent = 'Tap an option below';
+  if (!tossState.active) {
+    promptBar.className = 'prompt-bar';
+    promptTitle.textContent = 'MAKE YOUR MOVE';
+    promptSub.textContent = 'Tap an option below';
+  }
 
   if (gameMode === 'rps') {
     myDisplay.innerHTML = `<i class="fas fa-hand-back-fist"></i>`;
@@ -600,7 +798,7 @@ function resetMatchStates() {
 
   cricketState = {
     innings: 1,
-    battingPlayerId: isHost ? 'me' : 'opp',
+    battingPlayerId: null,
     target: 0,
     runs: 0,
     wickets: 0
@@ -611,8 +809,13 @@ function resetMatchStates() {
 
   endModal.classList.remove('open');
   inningsModal.classList.remove('open');
-  if (gameMode === 'cricket') syncCricketRoles();
-  resetTurnUI();
+  tossDecisionModal.classList.remove('open');
+
+  if (gameMode === 'cricket') {
+    openTossSetupModal();
+  } else {
+    resetTurnUI();
+  }
 }
 
 /* =========================================================
@@ -636,7 +839,6 @@ document.querySelectorAll('.choice-tile').forEach(tile => {
   });
 });
 
-// Innings OK button
 inningsOkBtn.addEventListener('click', () => {
   if (conn) {
     conn.send({ type: 'start_innings_2' });
@@ -644,7 +846,6 @@ inningsOkBtn.addEventListener('click', () => {
   startSecondInnings();
 });
 
-// Replay OK button
 modalResetBtn.addEventListener('click', () => {
   if (conn) {
     conn.send({ type: 'reset' });
